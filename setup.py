@@ -3,8 +3,8 @@ from setuptools import setup
 with open('README.md') as f:
     long_description = f.read()
 
-setup(name='defipy',
-      version='0.0.2',
+setup(name='DeFiPy',
+      version='0.0.3',
       description='DeFi for Python',
       long_description=long_description,
       long_description_content_type="text/markdown",
