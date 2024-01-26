@@ -4,7 +4,7 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      version='0.0.4',
+      version='0.0.7',
       description='DeFi for Python',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -32,8 +32,8 @@ setup(name='DeFiPy',
       ],
       install_requires=[
         'scipy >= 1.7.3',  
-        'uniswappy >= 1.1.0', 
-        'stableswappy >= 0.0.3',
-        'balancerpy >= 0.0.5'  
+        'uniswappy >= 1.1.1', 
+        'stableswappy >= 0.0.4',
+        'balancerpy >= 0.0.6'  
       ],      
       zip_safe=False)
