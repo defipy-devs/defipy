@@ -2,6 +2,11 @@
 Python package for DeFi modelling
 * Currently in Beta (version 0.0.4) until fully tested and analyzed
 
+Decoupled into sub-repos, which include
+* [UniswapPy](https://github.com/icmoore/uniswappy)
+* [BalancerPy](https://github.com/icmoore/balancerpy)
+* [StableSwapPy](https://github.com/icmoore/stableswappy)
+
 ## Install
 To install package:
 ```
