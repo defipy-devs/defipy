@@ -4,7 +4,7 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      version='0.0.3',
+      version='0.0.4',
       description='DeFi for Python',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -14,7 +14,21 @@ setup(name='DeFiPy',
       license='MIT',
       package_dir = {"defipy": "python/prod"},
       packages=[
-          'defipy'
+          'defipy',
+          'defipy.erc',
+          'defipy.math.basic',
+          'defipy.math.interest',
+          'defipy.math.interest.ips',
+          'defipy.math.interest.ips.aggregate',
+          'defipy.math.model',
+          'defipy.math.risk',
+          'defipy.process',
+          'defipy.process.burn',
+          'defipy.process.deposit',
+          'defipy.process.liquidity',
+          'defipy.process.mint',
+          'defipy.process.swap',
+          'defipy.simulate'          
       ],
       install_requires=[
         'scipy >= 1.7.3',  
