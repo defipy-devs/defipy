@@ -32,7 +32,7 @@ setup(name='DeFiPy',
       ],
       install_requires=[
         'scipy >= 1.7.3', 
-        'gmpy2 >= 2.1.5',
+        'gmpy2 >= 2.0.8',
         'uniswappy >= 1.1.2', 
         'stableswappy >= 0.0.4',
         'balancerpy >= 0.0.6'  
