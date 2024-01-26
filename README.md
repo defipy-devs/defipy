@@ -1,6 +1,6 @@
 # defipy
 Python package for DeFi modelling
-* Currently in Beta (version 0.0.1) until fully tested and analyzed
+* Currently in Beta (version 0.0.2) until fully tested and analyzed
 
 ## Install
 To install package:
