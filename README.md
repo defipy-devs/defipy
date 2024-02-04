@@ -1,6 +1,6 @@
 # defipy
-Python package for DeFi modelling
-* Currently in Beta (version 0.0.9)
+DeFi Analytics with Python
+* Currently in Beta (version 0.0.10)
 * Decoupled into [UniswapPy](https://github.com/icmoore/uniswappy),
 [BalancerPy](https://github.com/icmoore/balancerpy), and [StableSwapPy](https://github.com/icmoore/stableswappy) python packages
 
@@ -16,4 +16,4 @@ or
 ```
 
 ## DeFi Overview
-	* Python for DeFi analytics
+	* DeFi Analytics with Python
