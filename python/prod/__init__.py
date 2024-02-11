@@ -12,6 +12,8 @@ from defipy.process.liquidity import *
 from defipy.process.mint import *
 from defipy.process.swap import *
 from defipy.simulate import *
+from defipy.utils.interfaces import *
+from defipy.utils.data import *
 
 from uniswappy.cpt.exchg import *
 from uniswappy.cpt.factory import *
@@ -24,11 +26,13 @@ from stableswappy.quote import *
 from stableswappy.vault import *
 from stableswappy.cst.factory import *
 from stableswappy.cst.exchg import *
+from stableswappy.utils.data import StableswapExchangeData
 
 from balancerpy.quote import *
 from balancerpy.vault import *
 from balancerpy.cwpt.factory import *
 from balancerpy.cwpt.exchg import *
+from balancerpy.utils.data import BalancerExchangeData
 
 
 
