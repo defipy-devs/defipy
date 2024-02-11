@@ -22,16 +22,17 @@ from uniswappy.cpt.quote import *
 from uniswappy.cpt.vault import *
 from uniswappy.cpt.wallet import *
 
-
 from stableswappy.quote import *
 from stableswappy.vault import *
 from stableswappy.cst.factory import *
 from stableswappy.cst.exchg import *
+from stableswappy.utils.data import StableswapExchangeData
 
 from balancerpy.quote import *
 from balancerpy.vault import *
 from balancerpy.cwpt.factory import *
 from balancerpy.cwpt.exchg import *
+from balancerpy.utils.data import BalancerExchangeData
 
 
 
