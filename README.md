@@ -7,7 +7,7 @@ DeFi Analytics with Python
 ## Install
 To install package:
 ```
-> git clone https://github.com/icmoore/defipy
+> git clone https://github.com/defipy-devs/defipy
 > pip install .
 ```
 or
