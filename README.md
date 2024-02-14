@@ -1,5 +1,5 @@
 # defipy
-DeFi Analytics with Python (version 0.0.15)
+DeFi Analytics with Python (version 0.0.16)
 * Decoupled into [UniswapPy](https://github.com/icmoore/uniswappy),
 [BalancerPy](https://github.com/icmoore/balancerpy), and [StableSwapPy](https://github.com/icmoore/stableswappy) python packages
 
