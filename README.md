@@ -1,15 +1,9 @@
-DeFiPy: DeFi Analytics with Python
-===============================================
+# defipy
+DeFi Analytics with Python (version 0.0.11)
+* Decoupled into [UniswapPy](https://github.com/icmoore/uniswappy),
+[BalancerPy](https://github.com/icmoore/balancerpy), and [StableSwapPy](https://github.com/icmoore/stableswappy) python packages
 
-.. image:: https://readthedocs.org/projects/example-sphinx-basic/badge/?version=latest
-    :target: https://example-sphinx-basic.readthedocs.io/en/latest/?badge=latest
-    :alt: Documentation Status
-    
-Decoupled into `UniswapPy <https://github.com/icmoore/uniswappy>`_, `BalancerPy <https://github.com/icmoore/balancerpy>`_, and `StableswapPy <https://github.com/icmoore/stableswappy>`_, python packages
-
-
-Install
---------------------------
+## Install
 To install package:
 ```
 > git clone https://github.com/defipy-devs/defipy
@@ -23,9 +17,8 @@ or
 Uniswap Example
 --------------------------
 
-To setup a liquidity pool, you must first create the tokens in the pair using the ``ERC20`` object. Next, create a liquidity pool (LP) factory using ``IFactory`` object. Once this is setup, an unlimited amount of LPs can be created; the procedures for such are as follows:
+To setup a liquidity pool, you must first create the tokens in the pair using the `ERC20` object. Next, create a liquidity pool (LP) factory using `IFactory` object. Once this is setup, an unlimited amount of LPs can be created; the procedures for such are as follows:
 
-.. code-block:: console
 
     from defipy import *
 
@@ -42,7 +35,6 @@ To setup a liquidity pool, you must first create the tokens in the pair using th
     lp.add_liquidity("user0", eth_amount, dai_amount, eth_amount, dai_amount)
     lp.summary()
     
-.. code-block:: console
 
     #OUTPUT:
     Exchange ETH-DAI (LP)
@@ -51,8 +43,6 @@ To setup a liquidity pool, you must first create the tokens in the pair using th
     
 Balancer Example
 --------------------------   
-
-.. code-block:: console
 
     from defipy import *
     
@@ -82,7 +72,6 @@ Balancer Example
     lp.join_pool(bgrp, init_pool_shares, USER)
     lp.summary()
 
-.. code-block:: console
 
     #OUTPUT:
     Balancer Exchange: DAI|WETH (LP)
@@ -92,8 +81,6 @@ Balancer Example
     
 StableSwap Example
 --------------------------   
-
-.. code-block:: console
 
     from defipy import *
     
@@ -130,10 +117,8 @@ StableSwap Example
     lp.join_pool(sgrp, AMPL_COEFF, USER)
     lp.summary()
 
-.. code-block:: console
 
     #OUTPUT:
     Stableswap Exchange: DAI-USDC-USDT (LP)
     Reserves: DAI = 79566307.55982581, USDC = 81345068.187939, USDT = 55663250.772939
     Liquidity: 216573027.91811988   
-
