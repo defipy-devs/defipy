@@ -5,12 +5,12 @@ with open('README.md') as f:
 
 setup(name='DeFiPy',
       version='0.0.13',
-      description='DeFi for Python',
+      description='DeFi Analytics with Python',
       long_description=long_description,
       long_description_content_type="text/markdown",
-      url='http://github.com/icmoore/defipy',
+      url='http://github.com/defipy-devs/defipy',
       author = "icmoore",
-      author_email = "utiliwire@gmail.com",
+      author_email = "defipy.devs@gmail.com",
       license='MIT',
       package_dir = {"defipy": "python/prod"},
       packages=[
@@ -28,7 +28,9 @@ setup(name='DeFiPy',
           'defipy.process.liquidity',
           'defipy.process.mint',
           'defipy.process.swap',
-          'defipy.simulate'          
+          'defipy.simulate',
+          'defipy.utils.interfaces',
+          'defipy.utils.data'     
       ],
       install_requires=[
         'scipy >= 1.7.3', 
