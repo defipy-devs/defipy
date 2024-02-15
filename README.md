@@ -5,6 +5,9 @@ Welcome to the worlds first DeFi Python package with all major protocols intergr
 * [BalancerPy](https://github.com/icmoore/balancerpy)
 * [StableSwapPy](https://github.com/icmoore/stableswappy)
 
+## Docs
+Visit [DeFiPy docs](https://defipy.org) for full documentation with walk-through tutorials
+
 ## Install
 Must first install gmpy2 python package to handle the precision within the StableSwap protocol (requires CPython 3.7 or above). To install the latest release with pip:
 ```
