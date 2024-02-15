@@ -1,7 +1,9 @@
-# defipy
-DeFi Analytics with Python (version 0.0.16)
-* Decoupled into [UniswapPy](https://github.com/icmoore/uniswappy),
-[BalancerPy](https://github.com/icmoore/balancerpy), and [StableSwapPy](https://github.com/icmoore/stableswappy) python packages
+# defipy: DeFi Analytics with Python (v 0.0.16)
+
+Welcome to the worlds first DeFi Python package with all major protocols intergrated into one package! Implement your analytics in one package with DeFiPy. Since DeFiPy is built with a modular design in mind, implement your analystics protocols separately using:
+* [UniswapPy](https://github.com/icmoore/uniswappy)
+* [BalancerPy](https://github.com/icmoore/balancerpy)
+* [StableSwapPy](https://github.com/icmoore/stableswappy)
 
 ## Install
 Must first install gmpy2 python package to handle the precision within the StableSwap protocol (requires CPython 3.7 or above). To install the latest release with pip:
