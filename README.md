@@ -1,4 +1,4 @@
-# DeFiPy: DeFi Analytics with Python (v 0.0.18)
+'# DeFiPy: DeFi Analytics with Python (v 0.0.18)
 
 Welcome to the worlds first DeFi Python package with all major protocols intergrated into one package! Implement your analytics in one package with DeFiPy. Since DeFiPy is built with a modular design in mind, your can also silo your analytics by protocol 
 using:
@@ -137,7 +137,7 @@ StableSwap Example
 
 This application utilizes the 0x API to produce a mock Uniswap pool which allows end-users to stress test
 the limitations of a Uniswap pool setup using live price feeds from [0x API](https://0x.org); for backend setup, see 
-[notebook](https://github.com/defipy-devs/defipy/blob/main/notebooks/tutorials/quant_terminal.ipynb) 
+[notebook](https://github.com/defipy-devs/defipy/blob/main/notebooks/quant_terminal.ipynb) 
 
 Click [dashboard.defipy.org](https://dashboard.defipy.org/) for live link; for more detail see 
 [README](https://github.com/defipy-devs/defipy/tree/main/python/application/quant_terminal#readme) 
