@@ -14,6 +14,7 @@ from defipy.process.swap import *
 from defipy.simulate import *
 from defipy.utils.interfaces import *
 from defipy.utils.data import *
+from defipy.utils.client import *
 
 from uniswappy.cpt.exchg import *
 from uniswappy.cpt.factory import *
