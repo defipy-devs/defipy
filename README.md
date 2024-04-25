@@ -1,4 +1,4 @@
-# DeFiPy: DeFi Analytics with Python (v 0.0.18)
+# DeFiPy: DeFi Analytics with Python (v 0.0.19)
 
 Welcome to the worlds first DeFi Python package with all major protocols intergrated into one package! Implement your analytics in one package with DeFiPy. Since DeFiPy is built with a modular design in mind, your can also silo your analytics by protocol 
 using:
@@ -24,7 +24,7 @@ or
 > pip install defipy
 ```
 
-Uniswap Example
+Uniswap V2 Example
 --------------------------
 
 To setup a liquidity pool, you must first create the tokens in the pair using the `ERC20` object. Next, create a liquidity pool (LP) factory using `IFactory` object. Once this is setup, an unlimited amount of LPs can be created; the procedures for such are as follows:
@@ -33,23 +33,54 @@ To setup a liquidity pool, you must first create the tokens in the pair using th
     from defipy import *
 
     user_nm = 'user_intro'
-    eth_amount = 1000
-    dai_amount = 1000000
-
-    dai = ERC20("DAI", "0x01")
-    eth = ERC20("ETH", "0x02")
+    eth_amount = 3162.277660168379
+    dai_amount = 316227.7660168379
     
-    factory = UniswapFactory("ETH pool factory", "0x")
-    exchg_data = UniswapExchangeData(tkn0 = eth, tkn1 = dai, symbol="LP", address="0x11")
+    dai = ERC20("DAI", "0x111")
+    eth = ERC20("ETH", "0x09")
+    exchg_data = UniswapExchangeData(tkn0 = eth, tkn1 = dai, symbol="LP", 
+    address="0x011")
+    
+    factory = UniswapFactory("ETH pool factory", "0x2")
     lp = factory.deploy(exchg_data)
     lp.add_liquidity("user0", eth_amount, dai_amount, eth_amount, dai_amount)
     lp.summary()
     
 
     #OUTPUT:
-    Exchange ETH-DAI (LP)
-    Reserves: ETH = 1000, DAI = 1000000
+    Exchange ETH-DAI (LP) 
+    Reserves: ETH = 3162.277660168379, DAI = 316227.7660168379 
     Liquidity: 31622.776601683792 
+
+Uniswap V3 Example
+--------------------------
+
+    from defipy import *
+
+    user = 'user_intro'
+    fee = UniV3Utils.FeeAmount.MEDIUM
+    tick_spacing = UniV3Utils.TICK_SPACINGS[fee]
+    lwr_tick = UniV3Utils.getMinTick(tick_spacing)
+    upr_tick = UniV3Utils.getMaxTick(tick_spacing)
+    init_price = UniV3Utils.encodePriceSqrt(100, 1)
+    
+    dai = ERC20("DAI", "0x09")
+    eth = ERC20("ETH", "0x111")
+    
+    exchg_data = UniswapExchangeData(tkn0 = eth, tkn1 = dai, symbol="LP", 
+                                       address="0x011", version = 'V3', 
+                                       tick_spacing = tick_spacing, 
+                                       fee = fee)
+    
+    factory = UniswapFactory("ETH pool factory", "0x2")
+    lp = factory.deploy(exchg_data)
+    lp.initialize(init_price)
+    out = lp.mint(user, lwr_tick, upr_tick, 31622.776601683792)
+    lp.summary() 
+
+    Exchange ETH-DAI (LP) 
+    Reserves: ETH = 3162.277660168379, DAI = 316227.7660168379 
+    Liquidity: 31622.776601683792    
     
 Balancer Example
 --------------------------   
