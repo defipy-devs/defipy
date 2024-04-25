@@ -31,12 +31,13 @@ setup(name='DeFiPy',
           'defipy.simulate',
           'defipy.utils.interfaces',
           'defipy.utils.data',
-          'defipy.utils.client'
+          'defipy.utils.client',
+          'defipy.utils.tools.v3'
       ],
       install_requires=[
         'scipy >= 1.7.3', 
         'bokeh == 3.3.4',  
-        'uniswappy == 1.2.0', 
+        'uniswappy == 1.3.0', 
         'stableswappy == 0.0.11',
         'balancerpy == 0.0.9'  
       ],      
