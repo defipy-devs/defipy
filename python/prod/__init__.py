@@ -11,6 +11,7 @@ from defipy.process.deposit import *
 from defipy.process.liquidity import *
 from defipy.process.mint import *
 from defipy.process.swap import *
+from defipy.process.join import *
 from defipy.simulate import *
 from defipy.utils.interfaces import *
 from defipy.utils.data import *
