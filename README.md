@@ -1,4 +1,4 @@
-# DeFiPy: DeFi Analytics with Python (v 0.0.29)
+# DeFiPy: DeFi Analytics with Python (v 1.0.0)
 
 Welcome to the worlds first DeFi Python package with all major protocols intergrated into one package! Implement your analytics in one package with DeFiPy. Since DeFiPy is built with a modular design in mind, your can also silo your analytics by protocol 
 using:
