@@ -36,6 +36,7 @@ from balancerpy.quote import *
 from balancerpy.vault import *
 from balancerpy.cwpt.factory import *
 from balancerpy.cwpt.exchg import *
+from balancerpy.enums import *
 from balancerpy.utils.data import BalancerExchangeData
 
 

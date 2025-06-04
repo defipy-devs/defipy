@@ -1,1 +1,1 @@
-from uniswappy.process.swap import *
+from .Swap import Swap
