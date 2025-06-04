@@ -43,7 +43,7 @@ To setup a liquidity pool, you must first create the tokens in the pair using th
     
     factory = UniswapFactory("ETH pool factory", "0x2")
     lp = factory.deploy(exchg_data)
-    lp.add_liquidity("user0", eth_amount, dai_amount, eth_amount, dai_amount)
+    Join().apply(lp, "user0", eth_amount, tkn_amount)
     lp.summary()
     
 
@@ -63,6 +63,9 @@ Uniswap V3 Example
     lwr_tick = UniV3Utils.getMinTick(tick_spacing)
     upr_tick = UniV3Utils.getMaxTick(tick_spacing)
     init_price = UniV3Utils.encodePriceSqrt(100, 1)
+
+    eth_amount = 3162.277660168379
+    tkn_amount = 316227.7660168379
     
     dai = ERC20("DAI", "0x09")
     eth = ERC20("ETH", "0x111")
@@ -74,8 +77,7 @@ Uniswap V3 Example
     
     factory = UniswapFactory("ETH pool factory", "0x2")
     lp = factory.deploy(exchg_data)
-    lp.initialize(init_price)
-    out = lp.mint(user, lwr_tick, upr_tick, 31622.776601683792)
+    Join().apply(lp, "user0", eth_amount, tkn_amount, lwr_tick, upr_tick)
     lp.summary() 
 
     Exchange ETH-DAI (LP) 
@@ -110,7 +112,7 @@ Balancer Example
     bfactory = BalancerFactory("WETH pool factory", "0x")
     exchg_data = BalancerExchangeData(vault = bgrp, symbol="LP", address="0x1")
     lp = bfactory.deploy(exchg_data)
-    lp.join_pool(bgrp, init_pool_shares, USER)
+    Join().apply(lp, USER, init_pool_shares)
     lp.summary()
 
 
@@ -155,7 +157,7 @@ StableSwap Example
     sfactory = StableswapFactory("Pool factory", "0x")
     exchg_data = StableswapExchangeData(vault = sgrp, symbol="LP", address="0x11")
     lp = sfactory.deploy(exchg_data)
-    lp.join_pool(sgrp, AMPL_COEFF, USER)
+    Join().apply(lp, USER, AMPL_COEFF)
     lp.summary()
 
 
