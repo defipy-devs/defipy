@@ -12,7 +12,8 @@ from defipy.process.liquidity import *
 from defipy.process.mint import *
 from defipy.process.swap import *
 from defipy.process.join import *
-from defipy.simulate import *
+from defipy.analytics.simulate import *
+from defipy.analytics.risk import *
 from defipy.utils.interfaces import *
 from defipy.utils.data import *
 from defipy.utils.client import *
