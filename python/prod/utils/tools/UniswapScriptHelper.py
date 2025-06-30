@@ -1,3 +1,7 @@
+# Copyright [2025] [Ian Moore]
+# Distributed under the MIT License (license terms are at http://opensource.org/licenses/MIT).
+# Email: defipy.devs@gmail.com
+
 from uniswappy.utils.tools.v3 import UniV3Helper
 from uniswappy.process.swap import WithdrawSwap
 from uniswappy.process.deposit import SwapDeposit

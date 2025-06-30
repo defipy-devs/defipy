@@ -1,4 +1,4 @@
-# DeFiPy: DeFi Analytics with Python (v 1.0.1)
+# DeFiPy: DeFi Analytics with Python (v 1.0.2)
 
 Welcome to the worlds first DeFi Python package with all major protocols intergrated into one package! Implement your analytics in one package with DeFiPy. Since DeFiPy is built with a modular design in mind, your can also silo your analytics by protocol 
 using:
@@ -137,7 +137,6 @@ Balancer Example
     # Check reserves and liquidity
     lp.summary()
 
-
     #OUTPUT:
     Balancer Exchange: DAI-USDC (BSP)
     Reserves: DAI = 9979.92478694547, USDC = 20010
@@ -182,7 +181,6 @@ StableSwap Example
     
     # Check reserves and liquidity
     lp.summary()
-
 
     #OUTPUT:
     Stableswap Exchange: DAI-USDC (LP)
