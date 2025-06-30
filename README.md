@@ -137,7 +137,7 @@ Balancer Example
     # Check reserves and liquidity
     lp.summary()
 
-    #OUTPUT:
+    # OUTPUT:
     Balancer Exchange: DAI-USDC (BSP)
     Reserves: DAI = 9979.92478694547, USDC = 20010
     Weights: DAI = 0.2, USDC = 0.8
@@ -182,7 +182,7 @@ StableSwap Example
     # Check reserves and liquidity
     lp.summary()
 
-    #OUTPUT:
+    # OUTPUT:
     Stableswap Exchange: DAI-USDC (LP)
     Reserves: DAI = 10010, USDC = 19989.996791
     Liquidity: 29999.063056285642 
