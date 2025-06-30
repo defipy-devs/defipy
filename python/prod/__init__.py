@@ -17,7 +17,7 @@ from defipy.analytics.risk import *
 from defipy.utils.interfaces import *
 from defipy.utils.data import *
 from defipy.utils.client import *
-from defipy.utils.tools.v3 import *
+from defipy.utils.client.contract import *
 from defipy.utils.tools import *
 
 from uniswappy.cpt.exchg import *
@@ -26,6 +26,7 @@ from uniswappy.cpt.index import *
 from uniswappy.cpt.quote import *
 from uniswappy.cpt.vault import *
 from uniswappy.cpt.wallet import *
+from uniswappy.utils.tools.v3 import *
 
 from stableswappy.quote import *
 from stableswappy.vault import *

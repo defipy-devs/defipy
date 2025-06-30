@@ -1,4 +1,4 @@
-# DeFiPy: DeFi Analytics with Python (v 1.0.0)
+# DeFiPy: DeFi Analytics with Python (v 1.0.1)
 
 Welcome to the worlds first DeFi Python package with all major protocols intergrated into one package! Implement your analytics in one package with DeFiPy. Since DeFiPy is built with a modular design in mind, your can also silo your analytics by protocol 
 using:
@@ -31,95 +31,117 @@ To setup a liquidity pool, you must first create the tokens in the pair using th
 
 
     from defipy import *
-
-    user_nm = 'user_intro'
-    eth_amount = 3162.277660168379
-    dai_amount = 316227.7660168379
     
-    dai = ERC20("DAI", "0x111")
-    eth = ERC20("ETH", "0x09")
-    exchg_data = UniswapExchangeData(tkn0 = eth, tkn1 = dai, symbol="LP", 
-    address="0x011")
+    # Step 1: Define tokens
+    tkn = ERC20("TKN", "0x111")
+    eth = ERC20("ETH", "0x999")
     
+    # Step 2:  Initialize factory
     factory = UniswapFactory("ETH pool factory", "0x2")
-    lp = factory.deploy(exchg_data)
-    Join().apply(lp, "user0", eth_amount, tkn_amount)
-    lp.summary()
     
+    # Step 3: Set up exchange data for V2
+    exch_data = UniswapExchangeData(tkn0=eth, tkn1=tkn, symbol="LP", address="0x3")
+    
+    # Step 4: Deploy pool
+    lp = factory.deploy(exch_data)
+    
+    # Step 5: Add initial liquidity
+    join = Join()
+    join.apply(lp, "user", 1000, 10000)
+    
+    # Step 6: Perform swap
+    swap = Swap()
+    out = swap.apply(lp, tkn, "user", 10)
+    
+    # Check reserves and liquidity
+    lp.summary()    
 
-    #OUTPUT:
-    Exchange ETH-DAI (LP) 
-    Reserves: ETH = 3162.277660168379, DAI = 316227.7660168379 
-    Liquidity: 31622.776601683792 
+    # OUTPUT:
+    Exchange ETH-TKN (LP)
+    Reserves: ETH = 999.00399301896, TKN = 10010.0
+    Liquidity: 3162.2776601683795 
 
 Uniswap V3 Example
 --------------------------
 
     from defipy import *
-
-    user = 'user_intro'
-    fee = UniV3Utils.FeeAmount.MEDIUM
-    tick_spacing = UniV3Utils.TICK_SPACINGS[fee]
+    
+    # Step 1: Define tokens and parameters
+    eth = ERC20("ETH", "0x93")
+    tkn = ERC20("TKN", "0x111")
+    tick_spacing = 60
+    fee = 3000  # 0.3% fee tier
+    
+    # Step 2: Set up exchange data for V3
+    exch_data = UniswapExchangeData(tkn0=eth, tkn1=tkn, symbol="LP", address="0x811", version='V3', tick_spacing=tick_spacing, fee=fee)
+    
+    # Step 3: Initialize factory
+    factory = UniswapFactory("ETH pool factory", "0x2")
+    
+    # Step 4: Deploy pool
+    lp = factory.deploy(exch_data)
+    
+    # Step 5: Add initial liquidity within tick range
     lwr_tick = UniV3Utils.getMinTick(tick_spacing)
     upr_tick = UniV3Utils.getMaxTick(tick_spacing)
-    init_price = UniV3Utils.encodePriceSqrt(100, 1)
+    join = Join()
+    join.apply(lp, "user", 1000, 10000, lwr_tick, upr_tick)
+    
+    # Step 6: Perform swap
+    swap = Swap()
+    out = swap.apply(lp, tkn, "user", 10)
+    
+    # Check reserves and liquidity
+    lp.summary()
 
-    eth_amount = 3162.277660168379
-    tkn_amount = 316227.7660168379
-    
-    dai = ERC20("DAI", "0x09")
-    eth = ERC20("ETH", "0x111")
-    
-    exchg_data = UniswapExchangeData(tkn0 = eth, tkn1 = dai, symbol="LP", 
-                                       address="0x011", version = 'V3', 
-                                       tick_spacing = tick_spacing, 
-                                       fee = fee)
-    
-    factory = UniswapFactory("ETH pool factory", "0x2")
-    lp = factory.deploy(exchg_data)
-    Join().apply(lp, "user0", eth_amount, tkn_amount, lwr_tick, upr_tick)
-    lp.summary() 
-
-    Exchange ETH-DAI (LP) 
-    Reserves: ETH = 3162.277660168379, DAI = 316227.7660168379 
-    Liquidity: 31622.776601683792    
+    # OUTPUT:
+    Exchange ETH-TKN (LP)
+    Real Reserves:   ETH = 999.0039930189599, TKN = 10010.0
+    Gross Liquidity: 3162.277660168379  
     
 Balancer Example
 --------------------------   
 
     from defipy import *
     
-    USER = 'user_test'
-
-    amt_dai = 10000000
-    denorm_wt_dai = 10
-
-    amt_eth = 67738.6361731024
-    denorm_wt_eth = 40
-
-    init_pool_shares = 100    
-
-    dai = ERC20("DAI", "0x01")
-    dai.deposit(None, amt_dai)
-
-    weth = ERC20("WETH", "0x02")
-    weth.deposit(None, amt_eth)
-
-    bgrp = BalancerVault()
-    bgrp.add_token(dai, denorm_wt_dai)
-    bgrp.add_token(weth, denorm_wt_eth)
-
-    bfactory = BalancerFactory("WETH pool factory", "0x")
-    exchg_data = BalancerExchangeData(vault = bgrp, symbol="LP", address="0x1")
-    lp = bfactory.deploy(exchg_data)
-    Join().apply(lp, USER, init_pool_shares)
+    # Step 1: Define tokens
+    dai = ERC20("DAI", "0x111")
+    usdc = ERC20("USDC", "0x999")
+    
+    # Step 2: Deposit token amounts
+    dai.deposit(None, 10000)
+    usdc.deposit(None, 20000)
+    
+    # Step 3: Setup vault
+    vault = BalancerVault()
+    vault.add_token(dai, 10)  # Denormalized weight for DAI
+    vault.add_token(usdc, 40)  # Denormalized weight for WETH
+    
+    # Step 4: Set up exchange data for Balancer
+    exch_data = BalancerExchangeData(vault=vault, symbol="BSP", address="0x3")
+    
+    # Step 5: Initialize factor for Balancer
+    bfactory = BalancerFactory("WETH pool factory", "0x2")
+    
+    # Step 6: Deploy pool
+    lp = bfactory.deploy(exch_data)
+    
+    # Step 7: Join pool with initial liquidity
+    join = Join()
+    join.apply(lp, "user", 100) # Issue 100 pool shares
+    
+    # Step 8: Perform swap
+    swap = Swap(Proc.SWAPIN)
+    out = swap.apply(lp, dai, usdc, "user", 10)
+    
+    # Check reserves and liquidity
     lp.summary()
 
 
     #OUTPUT:
-    Balancer Exchange: DAI|WETH (LP)
-    Reserves: DAI = 10000000, WETH = 67738.6361731024
-    Weights: DAI = 0.2, WETH = 0.8
+    Balancer Exchange: DAI-USDC (BSP)
+    Reserves: DAI = 9979.92478694547, USDC = 20010
+    Weights: DAI = 0.2, USDC = 0.8
     Pool Shares: 100 
     
 StableSwap Example
@@ -127,44 +149,45 @@ StableSwap Example
 
     from defipy import *
     
-    USER = 'user_test'
-
-    AMPL_COEFF = 2000 
-
-    amt_dai = 79566307.559825807715868071
-    decimal_dai = 18
-
-    amt_usdc = 81345068.187939
-    decimal_usdc = 6
-
-    amt_usdt = 55663250.772939
-    decimal_usdt = 6
+    # Step 1: Define stablecoins and parameters
+    dai = ERC20("DAI", "0x111", 18)
+    usdc = ERC20("USDC", "0x222", 6)
+    AMPL_COEFF = 2000
     
-    dai = ERC20("DAI", "0x01", decimal_dai)
-    dai.deposit(None, amt_dai)
-
-    usdc = ERC20("USDC", "0x02", decimal_usdc)
-    usdc.deposit(None, amt_usdc)
-
-    usdt = ERC20("USDT", "0x03", decimal_usdt)
-    usdt.deposit(None, amt_usdt)    
+    # Step 2: Deposit token amounts
+    dai.deposit(None, 10000)
+    usdc.deposit(None, 20000)
     
+    # Step 3: Setup Stableswap vault and add tokens
     sgrp = StableswapVault()
     sgrp.add_token(dai)
     sgrp.add_token(usdc)
-    sgrp.add_token(usdt)    
-
-    sfactory = StableswapFactory("Pool factory", "0x")
-    exchg_data = StableswapExchangeData(vault = sgrp, symbol="LP", address="0x11")
-    lp = sfactory.deploy(exchg_data)
-    Join().apply(lp, USER, AMPL_COEFF)
+    
+    # Step 4: Set up exchange data for Stableswap
+    exch_data = StableswapExchangeData(vault = sgrp, symbol="LP", address="0x011")
+    
+    # Step 5: Initialize factor for Balancer
+    factory = StableswapFactory("Stableswap factory", "0x2")
+    
+    # Step 6: Deploy pool
+    lp = factory.deploy(exch_data)
+    
+    # Step 7: Join pool with initial liquidity
+    join = Join()
+    join.apply(lp, "user", AMPL_COEFF)
+    
+    # Step 8: Perform swap
+    swap = Swap()
+    out = swap.apply(lp, dai, usdc, "user", 10)
+    
+    # Check reserves and liquidity
     lp.summary()
 
 
     #OUTPUT:
-    Stableswap Exchange: DAI-USDC-USDT (LP)
-    Reserves: DAI = 79566307.55982581, USDC = 81345068.187939, USDT = 55663250.772939
-    Liquidity: 216573027.91811988  
+    Stableswap Exchange: DAI-USDC (LP)
+    Reserves: DAI = 10010, USDC = 19989.996791
+    Liquidity: 29999.063056285642 
 
 ## 0x Quant Terminal
 

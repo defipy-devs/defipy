@@ -4,7 +4,7 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      version='1.0.1',
+      version='1.0.2',
       description='DeFi Analytics with Python',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -34,6 +34,7 @@ setup(name='DeFiPy',
           'defipy.utils.interfaces',
           'defipy.utils.data',
           'defipy.utils.client',
+          'defipy.utils.client.contract',
           'defipy.utils.tools',
           'defipy.utils.tools.v3'
       ],
