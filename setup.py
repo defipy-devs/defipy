@@ -4,8 +4,8 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      version='1.0.6',
-      description='DeFi Analytics with Python',
+      version='1.0.7',
+      description='Python SDK for DeFi Analytics, Simulation, and Agents',
       long_description=long_description,
       long_description_content_type="text/markdown",
       url='http://github.com/defipy-devs/defipy',
