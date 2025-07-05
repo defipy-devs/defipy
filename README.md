@@ -1,10 +1,12 @@
-# DeFiPy: DeFi Analytics with Python (v 1.0.2)
+# DeFiPy: Python SDK for DeFi Analytics and Agents (v 1.0.2)
 
-Welcome to the worlds first DeFi Python package with all major protocols intergrated into one package! Implement your analytics in one package with DeFiPy. Since DeFiPy is built with a modular design in mind, your can also silo your analytics by protocol 
-using:
+DeFiPy is the first unified Python SDK for DeFi analytics, simulation, and autonomous agents. Built with modularity in mind, DeFiPy lets you isolate and extend your analytics by protocol using:
+
 * [UniswapPy](https://github.com/defipy-devs/uniswappy)
 * [BalancerPy](https://github.com/defipy-devs/balancerpy)
 * [StableSwapPy](https://github.com/defipy-devs/stableswappy)
+
+For onchain event access and scripting, pair it with [Web3Scout](https://github.com/defipy-devs/web3scout) — a companion tool for [decoding pool events](https://defipy.readthedocs.io/en/latest/onchain/pool_events.html) and [interfacing with Solidity contracts](https://defipy.readthedocs.io/en/latest/onchain/testnet_sim_univ2.html). Whether you’re building dashboards, simulations, or agent-based trading systems, DeFiPy + Web3Scout deliver a uniquely powerful toolset — unlike anything else in the ecosystem.
 
 ## Docs
 Visit [DeFiPy docs](https://defipy.org) for full documentation with walk-through tutorials
