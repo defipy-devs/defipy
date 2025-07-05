@@ -1,4 +1,4 @@
-# DeFiPy: Python SDK for DeFi Analytics and Agents (v 1.0.2)
+# DeFiPy: Python SDK for DeFi Analytics and Agents
 
 DeFiPy is the first unified Python SDK for DeFi analytics, simulation, and autonomous agents. Built with modularity in mind, DeFiPy lets you isolate and extend your analytics by protocol using:
 
