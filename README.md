@@ -204,4 +204,9 @@ Click [dashboard.defipy.org](https://dashboard.defipy.org/) for live link; for m
 
 ```
 > bokeh serve --show python/application/quant_terminal/bokeh_server.py
-```    
+```
+
+## License
+Licensed under the Apache License, Version 2.0.  
+See [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for details.  
+Portions of this project may include code from third-party projects under compatible open-source licenses.
