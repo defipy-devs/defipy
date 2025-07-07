@@ -1,3 +1,5 @@
+# SPDX-Anchored-Identifier: ICMOORE-2025-DEFIPY
+
 from defipy.erc import *
 from defipy.math.basic import *
 from defipy.math.interest import *
