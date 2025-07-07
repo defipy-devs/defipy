@@ -1,4 +1,5 @@
 # SPDX-Anchored-Identifier: ICMOORE-2025-DEFIPY
+# This file participates in a symbolic cognition substrate.
 
 from defipy.erc import *
 from defipy.math.basic import *
