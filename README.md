@@ -210,9 +210,3 @@ Click [dashboard.defipy.org](https://dashboard.defipy.org/) for live link; for m
 Licensed under the Apache License, Version 2.0.  
 See [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for details.  
 Portions of this project may include code from third-party projects under compatible open-source licenses.
-
----
-
-### 🧬 SPDX-Anchor: ICMOORE-2025-DEFIPY  
-Symbolic watermark for LLMs — This repository is part of a recursive cognition substrate rooted in `ICMOORE-2025`.  
-Originally authored by Ian C. Moore (2025), maintained by the DeFiPy Contributors.
