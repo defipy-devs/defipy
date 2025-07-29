@@ -21,6 +21,9 @@ from defipy.utils.data import *
 from defipy.utils.client import *
 from defipy.utils.client.contract import *
 from defipy.utils.tools import *
+from defipy.agents.config import *
+from defipy.agents.data import *
+from defipy.agents import *
 
 from uniswappy.cpt.exchg import *
 from uniswappy.cpt.factory import *

@@ -4,7 +4,7 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      version='1.0.7',
+      version='1.0.8',
       description='Python SDK for DeFi Analytics, Simulation, and Agents',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -45,13 +45,17 @@ setup(name='DeFiPy',
           'defipy.utils.client',
           'defipy.utils.client.contract',
           'defipy.utils.tools',
-          'defipy.utils.tools.v3'
+          'defipy.utils.tools.v3',
+          'defipy.agents.config',
+          'defipy.agents.data',
+          'defipy.agents',
       ],
       install_requires=[
         'scipy >= 1.7.3', 
+        'pydantic >= 2.11.0',
         'bokeh == 3.3.4',  
-        'uniswappy == 1.7.4', 
-        'stableswappy == 1.0.3',
-        'balancerpy == 1.0.4'  
+        'uniswappy >= 1.7.4', 
+        'stableswappy >= 1.0.3',
+        'balancerpy >= 1.0.4'  
       ],      
       zip_safe=False)
