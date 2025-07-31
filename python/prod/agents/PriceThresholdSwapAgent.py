@@ -22,6 +22,7 @@ from web3scout.abi.abi_load import ABILoad
 from web3scout.token.fetch.fetch_token import FetchToken
 from .config import PriceThresholdConfig
 from .data import UniswapPoolData
+from uniswappy import * 
 
 class PriceThresholdSwapAgent:
     def __init__(self, config: PriceThresholdConfig, verbose: bool = False):
@@ -30,15 +31,16 @@ class PriceThresholdSwapAgent:
         self.connector = ConnectW3(self.config.provider_url)  # Web3Scout setup
         self.connector.apply()
         self.verbose = verbose
-        self.lp_contract_instance = None
+        self.lp_contract = None
         self.lp_data = None
+        self.lp_state = None
         
     def apply(self):
-        self.lp_contract_instance = self._init_lp_contract()
+        self.lp_contract = self._init_lp_contract()
         
-        reserves = self.lp_contract_instance.functions.getReserves().call()
-        token0_address = self.lp_contract_instance.functions.token0().call()
-        token1_address = self.lp_contract_instance.functions.token1().call()
+        reserves = self.lp_contract.functions.getReserves().call()
+        token0_address = self.lp_contract.functions.token0().call()
+        token1_address = self.lp_contract.functions.token1().call()
         reserve0 = reserves[0]; reserve1 = reserves[1]
 
         w3 = self.connector.get_w3()
@@ -48,29 +50,95 @@ class PriceThresholdSwapAgent:
 
         self.lp_data = UniswapPoolData(TKN0, TKN1, reserves)
 
-    def get_current_price(self, tkn1_over_tkn0 = True):
+    def run(self, events, lp, tkn):
+        """Fetch batch of Sync events and process sequentially."""
+        if not events:
+            print("No Sync events found in range.")
+            return
+        for k in events:
+            reserve0 = events[k]['args']['reserve0']
+            reserve1 = events[k]['args']['reserve1']
+            block_num = events[k]['blockNumber']
+            event_price = self.calc_price(reserve0, reserve1, tkn1_over_tkn0 = True)
+            self.execute_action(lp, tkn, event_price, block_num)
 
-        TKN0 = self.lp_data.tkn0
-        TKN1 = self.lp_data.tkn1
-        reserves = self.lp_data.reserves
-        reserve0 = reserves[0]; reserve1 = reserves[1]; 
-
-        tkn0_decimal = TKN0.token_decimal
-        tkn1_decimal = TKN1.token_decimal
+    def prime_pool_state(self, start_block, user_nm = None):
+        w3 = self.get_w3() 
+        fetch_tkn = FetchToken(w3)
+        
+        lp_contract = self._init_lp_contract()
+        tkn0_addr = lp_contract.functions.token0().call()
+        tkn1_addr = lp_contract.functions.token1().call()
+        total_supply = lp_contract.functions.totalSupply().call(block_identifier=start_block)
+        reserves = lp_contract.functions.getReserves().call(block_identifier=start_block)
+        
+        # Step 2: Define tokens
+        tkn0 = fetch_tkn.apply(tkn0_addr)
+        tkn1 = fetch_tkn.apply(tkn1_addr)
+        
+        amt0 = fetch_tkn.amt_to_decimal(tkn0, reserves[0])
+        amt1 = fetch_tkn.amt_to_decimal(tkn1, reserves[1])
+        
+        # Step 3:  Initialize factory
+        factory = UniswapFactory("Pool factory", "0x2")
+        
+        # Step 4: Set up exchange data for V2
+        exch_data = UniswapExchangeData(tkn0=tkn0, tkn1=tkn1, symbol="LP", address=self.config.pool_address)
+        
+        # Step 5: Deploy pool
+        self.lp_state = factory.deploy(exch_data)
+        
+        # Step 6: Add initial liquidity
+        join = Join()
+        join.apply(self.lp_state, user_nm, amt0, amt1)
+        self.lp_state.total_supply = total_supply # override total supply
     
-        if(tkn1_over_tkn0):
-            price = (reserve0 / reserve1) * (10 ** (tkn1_decimal - tkn0_decimal))
-            if(self.verbose): print(f"{TKN1.token_name} Price in {TKN0.token_name}: {price}")
+        return self.lp_state
+
+    def execute_action(self, lp, tkn, price, block_num, tkn1_over_tkn0 = True):
+
+        tkn0 = self.lp_data.tkn0
+        tkn1 = self.lp_data.tkn1
+        
+        """Execute swap if condition met (simulated or live)."""
+        if self.check_condition(block_num = block_num, tkn1_over_tkn0 = tkn1_over_tkn0):
+            try:
+                out = Swap().apply(lp, tkn, "test_action", self.config.swap_amount)  
+                print(f"Block {block_num}: Swapped {self.config.swap_amount} {tkn0.token_name} for {out} {tkn1.token_name}")
+            except Exception as e:
+                print(f"Block {block_number}: Swap failed: {e}")
+
+    def get_token_price(self, tkn1_over_tkn0 = True, block_num = None):
+        
+        if(block_num == None):
+            reserves = self.lp_data.reserves
         else:
-            price = (reserve1 / reserve0) * (10 ** (tkn0_decimal - tkn1_decimal))
-            if(self.verbose): print(f"{TKN0.token_name} Price in {TKN1.token_name}: {price}")
+            lp_contract = self._init_lp_contract()
+            reserves = lp_contract.functions.getReserves().call(block_identifier=block_num)
+            
+        price = self.calc_price(reserves[0], reserves[1], tkn1_over_tkn0)
     
         return price
 
-    def check_condition(self, threshold = None, tkn1_over_tkn0 = True):
+    def calc_price(self, reserve0, reserve1, tkn1_over_tkn0 = True):
+        tkn0 = self.lp_data.tkn0
+        tkn1 = self.lp_data.tkn1
+        tkn0_decimal = tkn0.token_decimal
+        tkn1_decimal = tkn1.token_decimal
+        
+        if(tkn1_over_tkn0):
+            price = (reserve0 / reserve1) * (10 ** (tkn1_decimal - tkn0_decimal))
+            if(self.verbose): print(f"{tkn1.token_name} Price in {tkn0.token_name}: {price}")
+        else:
+            price = (reserve1 / reserve0) * (10 ** (tkn0_decimal - tkn1_decimal))
+            if(self.verbose): print(f"{tkn0.token_name} Price in {tkn1.token_name}: {price}")
+                
+        return price
+    
+    def check_condition(self, threshold = None, tkn1_over_tkn0 = True, block_num = None):
         self.config.threshold = self.config.threshold if threshold == None else threshold;
         self.apply()
-        price = self.get_current_price(tkn1_over_tkn0)
+        price = self.get_token_price(tkn1_over_tkn0, block_num)
         return price > self.config.threshold
 
     def get_connector(self):
@@ -83,7 +151,7 @@ class PriceThresholdSwapAgent:
         return self.connector.get_w3() 
 
     def get_contract_instance(self):
-        return self.lp_contract_instance
+        return self.lp_contract
 
     def get_lp_data(self):
         return self.lp_data
@@ -92,5 +160,5 @@ class PriceThresholdSwapAgent:
         pair_address = self.config.pool_address
         w3 = self.get_w3()       
         abi_obj = self.get_abi()
-        lp_contract_instance = abi_obj.apply(w3, pair_address)   
-        return lp_contract_instance
+        lp_contract = abi_obj.apply(w3, pair_address)   
+        return lp_contract

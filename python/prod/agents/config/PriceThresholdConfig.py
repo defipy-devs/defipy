@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 class PriceThresholdConfig(BaseModel):  
     threshold: float  # e.g., 3000.0 (price above which to swap)
+    swap_amount: float  # e.g., 1.0 (swap amount if threshold met)
     pool_address: str  # Uniswap V2 pool
     provider_url: str  # e.g., Infura for Web3Scout
     abi_name: str  # e.g., 'UniswapV2Pair' (new field for ABI identifier)
