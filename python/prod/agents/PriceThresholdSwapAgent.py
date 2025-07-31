@@ -19,7 +19,9 @@
 from web3scout.event.process.retrieve_events import RetrieveEvents
 from web3scout.utils.connect import ConnectW3
 from web3scout.abi.abi_load import ABILoad
+from web3scout.event.process.retrieve_events import RetrieveEvents
 from web3scout.token.fetch.fetch_token import FetchToken
+from web3scout.enums.event_type_enum import EventTypeEnum as EventType
 from .config import PriceThresholdConfig
 from .data import UniswapPoolData
 from uniswappy import * 
@@ -50,7 +52,12 @@ class PriceThresholdSwapAgent:
 
         self.lp_data = UniswapPoolData(TKN0, TKN1, reserves)
 
-    def run(self, events, lp, tkn):
+    def run_batch(self, tkn, start_block, last_block):
+        rEvents = RetrieveEvents(self.connector, self.abi)
+        events = rEvents.apply(EventType.SYNC, address = self.config.pool_address, 
+                               start_block=start_block, end_block=last_block)
+        lp = self.prime_pool_state(start_block, 'user')
+
         """Fetch batch of Sync events and process sequentially."""
         if not events:
             print("No Sync events found in range.")
@@ -61,6 +68,18 @@ class PriceThresholdSwapAgent:
             block_num = events[k]['blockNumber']
             event_price = self.calc_price(reserve0, reserve1, tkn1_over_tkn0 = True)
             self.execute_action(lp, tkn, event_price, block_num)
+    
+    # def run(self, events, lp, tkn):
+    #     """Fetch batch of Sync events and process sequentially."""
+    #     if not events:
+    #         print("No Sync events found in range.")
+    #         return
+    #     for k in events:
+    #         reserve0 = events[k]['args']['reserve0']
+    #         reserve1 = events[k]['args']['reserve1']
+    #         block_num = events[k]['blockNumber']
+    #         event_price = self.calc_price(reserve0, reserve1, tkn1_over_tkn0 = True)
+    #         self.execute_action(lp, tkn, event_price, block_num)
 
     def prime_pool_state(self, start_block, user_nm = None):
         w3 = self.get_w3() 
