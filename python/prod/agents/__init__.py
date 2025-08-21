@@ -1,2 +1,3 @@
 from .PriceThresholdSwapAgent import PriceThresholdSwapAgent
 from .TVLBasedLiquidityExitAgent import TVLBasedLiquidityExitAgent
+from .VolumeSpikeNotifierAgent import VolumeSpikeNotifierAgent
