@@ -4,7 +4,7 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      version='1.0.9',
+      version='1.0.10',
       description='Python SDK for DeFi Analytics, Simulation, and Agents',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -12,15 +12,6 @@ setup(name='DeFiPy',
       author = "icmoore",
       author_email = "defipy.devs@gmail.com",
       license="Apache-2.0",
-      classifiers=[
-            "License :: OSI Approved :: Apache Software License",
-            "Programming Language :: Python :: 3",
-            "Operating System :: OS Independent",
-            "Intended Audience :: Developers",
-            "Topic :: Software Development :: Libraries :: Python Modules",
-            "Topic :: Scientific/Engineering :: Information Analysis",
-            "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
-      ],
       package_dir = {"defipy": "python/prod"},
       packages=[
           'defipy',
