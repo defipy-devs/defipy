@@ -23,7 +23,7 @@ It covers:
 👉 **Buy on Amazon:** https://www.amazon.com/dp/B0G3RV5QRB  
 
 ## 📝 Docs
-Visit [**Docs:**](https://defipy.org) for full documentation 
+Visit [**DeFiPy docs**](https://defipy.org) for full documentation 
 
 ## 🔍 Install
 Must first install gmpy2 python package to handle the precision within the StableSwap protocol (requires CPython 3.7 or above). To install the latest release with pip:
