@@ -8,10 +8,22 @@ DeFiPy is the first unified Python SDK for DeFi analytics, simulation, and auton
 
 For onchain event access and scripting, pair it with [Web3Scout](https://github.com/defipy-devs/web3scout) — a companion tool for [decoding pool events](https://defipy.readthedocs.io/en/latest/onchain/pool_events.html) and [interfacing with Solidity contracts](https://defipy.readthedocs.io/en/latest/onchain/testnet_sim_univ2.html). Whether you’re building dashboards, simulations, or agent-based trading systems, DeFiPy + Web3Scout deliver a uniquely powerful toolset — unlike anything else in the ecosystem.
 
-## Docs
-Visit [DeFiPy docs](https://defipy.org) for full documentation with walk-through tutorials
+## 📘 Official Textbook
 
-## Install
+Looking for a structured, graduate-level walkthrough of DeFiPy and DeFi analytics?
+
+**_DeFiPy: Python SDK for On-Chain Analytics_** is the official companion textbook for this project.  
+It covers:
+
+- AMM math and invariants (Uniswap V2 & V3, Balancer, Stableswap)
+- On-chain analytics and pool/event decoding
+- Python workflows for DeFi modeling and simulation
+- Agent-based architectures and risk pipelines built on DeFiPy
+
+👉 **Buy on Amazon:** https://www.amazon.com/dp/B0G3RV5QRB  
+👉 **Docs:** [DeFiPy docs](https://defipy.org)
+
+## 🔍 Install
 Must first install gmpy2 python package to handle the precision within the StableSwap protocol (requires CPython 3.7 or above). To install the latest release with pip:
 ```
 > pip install gmpy2
