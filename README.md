@@ -8,7 +8,7 @@ DeFiPy is the first unified Python SDK for DeFi analytics, simulation, and auton
 
 For onchain event access and scripting, pair it with [Web3Scout](https://github.com/defipy-devs/web3scout) — a companion tool for [decoding pool events](https://defipy.readthedocs.io/en/latest/onchain/pool_events.html) and [interfacing with Solidity contracts](https://defipy.readthedocs.io/en/latest/onchain/testnet_sim_univ2.html). Whether you’re building dashboards, simulations, or agent-based trading systems, DeFiPy + Web3Scout deliver a uniquely powerful toolset — unlike anything else in the ecosystem.
 
-🔗 SPDX-Anchor: [anchorregistry.ai/AR-2026-Pvdp0W5](https://anchorregistry.ai/AR-2026-Pvdp0W5)
+🔗 SPDX-Anchor: [anchorregistry.ai/AR-2026-YdPXB5g](https://anchorregistry.ai/AR-2026-YdPXB5g)
 
 ## 📝 Docs
 Visit [**DeFiPy docs**](https://defipy.org) for full documentation 
