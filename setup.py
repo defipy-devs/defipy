@@ -4,7 +4,7 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      version='1.0.10',
+      version='1.0.11',
       description='Python SDK for DeFi Analytics, Simulation, and Agents',
       long_description=long_description,
       long_description_content_type="text/markdown",

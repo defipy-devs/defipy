@@ -149,10 +149,10 @@ class VolumeSpikeNotifierAgent:
         return self.mock_lp_pos_amt
 
     def withdraw_mock_position(self, lp, tkn, user_nm, lp_amt = None):
-        assert self.mock_lp_pos_amt != None, 'TVLBasedLiquidityExitAgent: MOCK_POSITION_UNAVAILABLE' 
+        assert self.mock_lp_pos_amt != None, 'VolumeSpikeNotifierAgent: MOCK_POSITION_UNAVAILABLE'
         lp_amt = self.mock_lp_pos_amt if lp_amt == None else lp_amt
-        tkn_amt = LPQuote(False).get_amount_from_lp(lp, tkn0, lp_amt)
-        amount_out = WithdrawSwap().apply(lp, tkn0, user_nm, tkn_amt)
+        tkn_amt = LPQuote(False).get_amount_from_lp(lp, tkn, lp_amt)
+        amount_out = WithdrawSwap().apply(lp, tkn, user_nm, tkn_amt)
         return amount_out
 
     def get_pool_volume(self, lp, tkn, block_num):

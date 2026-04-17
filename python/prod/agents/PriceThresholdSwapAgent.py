@@ -111,7 +111,7 @@ class PriceThresholdSwapAgent:
                 out = Swap().apply(lp, tkn, "test_action", self.config.swap_amount)  
                 print(f"Block {block_num}: Swapped {self.config.swap_amount} {tkn0.token_name} for {out} {tkn1.token_name}")
             except Exception as e:
-                print(f"Block {block_number}: Swap failed: {e}")
+                print(f"Block {block_num}: Swap failed: {e}")
 
     def get_token_price(self, tkn1_over_tkn0 = True, block_num = None):
         
