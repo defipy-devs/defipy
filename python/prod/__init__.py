@@ -1,5 +1,3 @@
-# This file participates in a symbolic cognition substrate.
-
 from defipy.erc import *
 from defipy.math.basic import *
 from defipy.math.interest import *
@@ -21,9 +19,30 @@ from defipy.utils.data import *
 from defipy.utils.client import *
 from defipy.utils.client.contract import *
 from defipy.utils.tools import *
-from defipy.agents.config import *
-from defipy.agents.data import *
-from defipy.agents import *
+
+# Agent modules require web3scout, available via the [book] extra.
+# If web3scout isn't installed, skip agent imports so core defipy
+# (primitives, math, analytics) remains usable.
+try:
+    from defipy.agents.config import *
+    from defipy.agents.data import *
+    from defipy.agents import *
+except ImportError as _agent_import_err:
+    if 'web3scout' in str(_agent_import_err):
+        import warnings as _warnings
+        _warnings.warn(
+            "defipy.agents requires web3scout. To enable agent support, "
+            "install with: pip install defipy[book]",
+            ImportWarning,
+            stacklevel=2,
+        )
+        del _warnings
+    else:
+        raise
+    del _agent_import_err
+
+from defipy.primitives import *
+from defipy.primitives.position import *
 
 from uniswappy.cpt.exchg import *
 from uniswappy.cpt.factory import *

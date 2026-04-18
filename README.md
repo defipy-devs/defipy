@@ -14,19 +14,48 @@ For onchain event access and scripting, pair it with [Web3Scout](https://github.
 Visit [**DeFiPy docs**](https://defipy.org) for full documentation 
 
 ## 🔍 Install
-Must first install gmpy2 python package to handle the precision within the StableSwap protocol (requires CPython 3.7 or above). To install the latest release with pip:
-```
-> pip install gmpy2
-```
-Also, in many cases will need to have required libraries (GMP, MPFR and MPC) already installed on your system, see [gmpy2 installation docs](https://gmpy2.readthedocs.io/en/latest/install.html) for more info. Once setup, install the latest release of DeFiPy with pip:
-```
-> git clone https://github.com/defipy-devs/defipy
-> pip install .
-```
-or
+
+DeFiPy requires **Python 3.10 or later**. Install via pip:
+
 ```
 > pip install defipy
 ```
+
+### Book install (chapter 9 agents)
+
+Chapter 9 of *Hands-On AMMs with Python* — *Building Autonomous DeFi Agents* — uses live chain integration via `web3scout`. To run those examples, install the `[book]` extra:
+
+```
+> pip install defipy[book]
+```
+
+This pulls in `web3scout` on top of the core install, enabling the chain event monitoring, ABI loading, and token-fetching utilities that chapter 9's agents require. Other chapters work with the core install alone.
+
+### Source install
+
+To install from source:
+
+```
+> git clone https://github.com/defipy-devs/defipy
+> cd defipy
+> pip install .
+```
+
+### System libraries for gmpy2
+
+DeFiPy depends on `gmpy2` for high-precision arithmetic in StableSwap math. On most platforms, `pip` will install `gmpy2` from a prebuilt wheel and no further setup is needed. If the install fails, you may need the GMP, MPFR, and MPC system libraries installed *before* `pip install`:
+
+**macOS (Homebrew):**
+```
+> brew install gmp mpfr libmpc
+```
+
+**Linux (Debian / Ubuntu):**
+```
+> sudo apt install libgmp-dev libmpfr-dev libmpc-dev
+```
+
+See the [gmpy2 installation docs](https://gmpy2.readthedocs.io/en/latest/install.html) for other platforms.
 
 ## 🔍 Learning Resources
 

@@ -4,7 +4,7 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      version='1.0.11',
+      version='1.2.0',
       description='Python SDK for DeFi Analytics, Simulation, and Agents',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -40,13 +40,34 @@ setup(name='DeFiPy',
           'defipy.agents.config',
           'defipy.agents.data',
           'defipy.agents',
+          'defipy.primitives',
+          'defipy.primitives.position',
       ],
       install_requires=[
-        'scipy >= 1.7.3', 
-        'pydantic >= 2.11.0',
-        'bokeh == 3.3.4',  
-        'uniswappy >= 1.7.4', 
-        'stableswappy >= 1.0.3',
-        'balancerpy >= 1.0.4'  
-      ],      
+          # Math & numerics
+          'scipy >= 1.7.3',
+          'numpy >= 1.21',
+          'gmpy2 >= 2.1',
+          # Data & config
+          'pandas >= 1.3',
+          'pydantic >= 2.11.0',
+          'attrs >= 21.0',
+          # Web & chain
+          'requests >= 2.28',
+          'web3 >= 6.0',
+          # Terminal & viz
+          'termcolor >= 2.4.0',
+          'bokeh >= 3.3',
+          # DeFiPy protocol packages
+          'uniswappy >= 1.7.7',
+          'balancerpy >= 1.0.6',
+          'stableswappy >= 1.0.5',
+      ],
+      extras_require={
+          # Agents require chain integration via web3scout. Install with:
+          #   pip install defipy[book]
+          # Named 'book' because this extra primarily exists for readers
+          # of 'Hands-On AMMs with Python' running the agent notebooks.
+          'book': ['web3scout >= 0.2.0'],
+      },
       zip_safe=False)
