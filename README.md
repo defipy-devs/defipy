@@ -31,6 +31,16 @@ Chapter 9 of *Hands-On AMMs with Python* â€” *Building Autonomous DeFi Agents* â
 
 This pulls in `web3scout` on top of the core install, enabling the chain event monitoring, ABI loading, and token-fetching utilities that chapter 9's agents require. Other chapters work with the core install alone.
 
+### Anvil install (local Foundry workflows)
+
+If you're using `ExecuteScript` or `UniswapScriptHelper` against a local [Anvil](https://book.getfoundry.sh/anvil/) node and don't need the full `web3scout` event-monitoring stack, the lighter `[anvil]` extra just adds `web3.py`:
+
+```
+> pip install defipy[anvil]
+```
+
+`[book]` already includes everything in `[anvil]`, so book readers only need `[book]`.
+
 ### Source install
 
 To install from source:

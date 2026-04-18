@@ -158,3 +158,12 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Claude worktrees (tooling scratch directories, not project content)
+.claude/
+
+# Clean-venv test artifact (created by resources/run_clean_test_suite.sh)
+.venv_ci/
+
+# macOS metadata
+.DS_Store

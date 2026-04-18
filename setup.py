@@ -52,9 +52,6 @@ setup(name='DeFiPy',
           'pandas >= 1.3',
           'pydantic >= 2.11.0',
           'attrs >= 21.0',
-          # Web & chain
-          'requests >= 2.28',
-          'web3 >= 6.0',
           # Terminal & viz
           'termcolor >= 2.4.0',
           'bokeh >= 3.3',
@@ -64,10 +61,17 @@ setup(name='DeFiPy',
           'stableswappy >= 1.0.5',
       ],
       extras_require={
-          # Agents require chain integration via web3scout. Install with:
-          #   pip install defipy[book]
-          # Named 'book' because this extra primarily exists for readers
-          # of 'Hands-On AMMs with Python' running the agent notebooks.
-          'book': ['web3scout >= 0.2.0'],
+          # [book]: for readers of 'Hands-On AMMs with Python'.
+          #   - web3scout powers the chapter 9 agent examples.
+          #   - web3 is needed by ExecuteScript and UniswapScriptHelper,
+          #     which some chapters use against a local Anvil node.
+          # web3 is also a transitive dep via web3scout, but declaring it
+          # explicitly keeps intent visible and guards against any future
+          # change in web3scout's own dep surface.
+          'book': ['web3scout >= 0.2.0', 'web3 >= 6.0, < 7.0'],
+          # [anvil]: for users running ExecuteScript or UniswapScriptHelper
+          # against a local Anvil node WITHOUT needing web3scout's chain
+          # event monitoring stack. Lighter install than [book].
+          'anvil': ['web3 >= 6.0, < 7.0'],
       },
       zip_safe=False)
