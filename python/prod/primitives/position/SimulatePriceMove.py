@@ -63,8 +63,8 @@ class SimulatePriceMove:
         of actually redeeming and swapping out. This makes the output
         scale-invariant (doubling position_size_lp doubles new_value) and
         is the correct interpretation for hypothetical-value analysis.
-        AnalyzePosition uses settlement-value semantics via LPQuote, which
-        answers a different question ("what would I realize on exit?").
+        AnalyzePosition uses the same paper-value convention; the two
+        primitives agree on how a position is valued at any given state.
     """
 
     def __init__(self):
@@ -130,9 +130,9 @@ class SimulatePriceMove:
         # amounts are the pure reserve share entitled to position_size_lp
         # of liquidity at the current state — no settlement swap, no price
         # impact. This is the "paper value" interpretation of a position,
-        # appropriate for hypothetical-price analysis. (Contrast with
-        # AnalyzePosition, which uses LPQuote — a settlement-value
-        # interpretation that answers "what would I realize on exit?")
+        # appropriate for hypothetical-price analysis. AnalyzePosition uses
+        # the same mechanism for the same reason; the two primitives agree
+        # on how a position is valued.
         il_helper = UniswapImpLoss(lp, position_size_lp, lwr_tick, upr_tick)
         current_x_amt = il_helper.x_tkn_init
         current_y_amt = il_helper.y_tkn_init

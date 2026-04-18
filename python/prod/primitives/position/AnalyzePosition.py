@@ -17,7 +17,6 @@
 # limitations under the License
 
 from uniswappy.analytics.risk import UniswapImpLoss
-from uniswappy.cpt.quote import LPQuote
 from uniswappy.utils.data import UniswapExchangeData
 from ...utils.data import PositionAnalysis
 
@@ -43,11 +42,13 @@ class AnalyzePosition:
         state to compute what the position is worth now, what it would be
         worth if held, and the full IL/fee decomposition.
 
-        UniswapImpLoss.calc_iloss() is used as a pure math helper; its
-        stateful entry-capture semantics are not used. When the Twin layer
-        ships, an alternate overload can accept two twin snapshots
-        (entry_twin, current_twin) for callers who'd rather pass pool states
-        than scalar amounts.
+        UniswapImpLoss serves a dual role here. Its constructor captures
+        the linear share of current reserves (x_tkn_init, y_tkn_init)
+        entitled to lp_init_amt; its calc_iloss method provides the
+        closed-form IL formula. Both faces of that helper are used below.
+        When the Twin layer ships, an alternate overload can accept two
+        twin snapshots (entry_twin, current_twin) for callers who'd rather
+        pass pool states than scalar amounts.
     """
 
     def __init__(self):
@@ -90,15 +91,14 @@ class AnalyzePosition:
         x_tkn = tokens[lp.token0]
         y_tkn = tokens[lp.token1]
 
-        # Current position amounts: one-sided reserve share at current state.
-        # LPQuote(False) returns the raw reserve amount entitled to by the
-        # LP tokens (pre-swap, no opposing-token conversion).
-        current_x_amt = LPQuote(False).get_amount_from_lp(
-            lp, x_tkn, lp_init_amt, lwr_tick, upr_tick
-        )
-        current_y_amt = LPQuote(False).get_amount_from_lp(
-            lp, y_tkn, lp_init_amt, lwr_tick, upr_tick
-        )
+        # One helper does double duty: UniswapImpLoss's constructor gives
+        # us the linear-share token amounts (x_tkn_init / y_tkn_init), and
+        # the same instance provides calc_iloss for the IL formula below.
+        # The token amounts are the pure reserve share entitled to
+        # lp_init_amt at current state — no settlement swap.
+        il = UniswapImpLoss(lp, lp_init_amt, lwr_tick, upr_tick)
+        current_x_amt = il.x_tkn_init
+        current_y_amt = il.y_tkn_init
 
         # Price of y_token expressed in x_token units (e.g., ETH per DAI).
         price_y_in_x = lp.get_price(y_tkn)
@@ -123,7 +123,6 @@ class AnalyzePosition:
 
         if initial_price_x_in_y > 0:
             alpha = current_price_x_in_y / initial_price_x_in_y
-            il = UniswapImpLoss(lp, lp_init_amt, lwr_tick, upr_tick)
             if lp.version == UniswapExchangeData.VERSION_V2:
                 il_raw = il.calc_iloss(alpha)
             else:

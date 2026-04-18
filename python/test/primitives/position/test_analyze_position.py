@@ -19,6 +19,8 @@
 import sys, os, unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)).split('/python/')[0])
 
+import pytest
+
 from uniswappy.erc import ERC20
 from uniswappy.cpt.factory import UniswapFactory
 from uniswappy.utils.data import UniswapExchangeData
@@ -149,6 +151,42 @@ class TestAnalyzePosition(unittest.TestCase):
         Swap().apply(self.lp, self.dai, USER, 10000)
         result = self.analyze()
         self.assertEqual(result.diagnosis, "il_dominant")
+
+
+# ─── V3 smoke suite ──────────────────────────────────────────────
+#
+# Added retroactively to cover the gap I shipped with primitive #1 —
+# the original test file only exercised V2, so the V3 codepath through
+# LPQuote(False).get_amount_from_lp was never run. These smoke tests
+# hold the V3 path accountable to the same entry-condition invariants
+# as V2: at entry, IL and net_pnl should be essentially zero.
+
+class TestAnalyzePositionV3(unittest.TestCase):
+
+    @pytest.fixture(autouse = True)
+    def _bind_setup(self, v3_setup):
+        self.setup = v3_setup
+
+    def analyze(self, holding_period_days = None):
+        return AnalyzePosition().apply(
+            self.setup.lp, self.setup.lp_init_amt,
+            self.setup.entry_x_amt, self.setup.entry_y_amt,
+            lwr_tick = self.setup.lwr_tick,
+            upr_tick = self.setup.upr_tick,
+            holding_period_days = holding_period_days,
+        )
+
+    def test_v3_returns_position_analysis(self):
+        result = self.analyze()
+        self.assertIsInstance(result, PositionAnalysis)
+
+    def test_v3_at_entry_il_near_zero(self):
+        result = self.analyze()
+        self.assertAlmostEqual(result.il_percentage, 0.0, places = 4)
+
+    def test_v3_at_entry_net_pnl_near_zero(self):
+        result = self.analyze()
+        self.assertAlmostEqual(result.net_pnl, 0.0, places = 4)
 
 
 if __name__ == '__main__':

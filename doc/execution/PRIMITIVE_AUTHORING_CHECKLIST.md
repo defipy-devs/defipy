@@ -167,5 +167,7 @@ A primitive is shipped when:
 
 | Primitive | Category | Tests | Date |
 |---|---|---|---|
-| AnalyzePosition | position/ | 14 | 2026-04-18 |
+| AnalyzePosition | position/ | 17 | 2026-04-18 |
 | SimulatePriceMove | position/ | 21 | 2026-04-18 |
+| CalculateSlippage | execution/ | 20 | 2026-04-18 |
+| CheckTickRangeStatus | risk/ | 16 | 2026-04-18 |
