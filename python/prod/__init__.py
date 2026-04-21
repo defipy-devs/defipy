@@ -21,24 +21,23 @@ from defipy.utils.client.contract import *
 from defipy.utils.tools import *
 
 # Agent modules require web3scout, available via the [book] extra.
-# If web3scout isn't installed, skip agent imports so core defipy
+# If web3scout (or any of its transitive deps like a specific web3.py
+# surface) isn't satisfied, skip agent imports so core defipy
 # (primitives, math, analytics) remains usable.
 try:
     from defipy.agents.config import *
     from defipy.agents.data import *
     from defipy.agents import *
 except ImportError as _agent_import_err:
-    if 'web3scout' in str(_agent_import_err):
-        import warnings as _warnings
-        _warnings.warn(
-            "defipy.agents requires web3scout. To enable agent support, "
-            "install with: pip install defipy[book]",
-            ImportWarning,
-            stacklevel=2,
-        )
-        del _warnings
-    else:
-        raise
+    import warnings as _warnings
+    _warnings.warn(
+        "defipy.agents could not be imported ({}). Agents require "
+        "web3scout + a compatible web3.py; install with: "
+        "pip install defipy[book]".format(_agent_import_err),
+        ImportWarning,
+        stacklevel=2,
+    )
+    del _warnings
     del _agent_import_err
 
 from defipy.primitives import *

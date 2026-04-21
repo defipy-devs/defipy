@@ -146,6 +146,11 @@ Cover these categories (adapt naming to the primitive's semantics):
 - **Edge cases** — zero inputs, missing optional params, extreme values.
 - **Classification / diagnosis outputs** — if the primitive returns a string
   category, cover each possible category.
+- **Threshold ceilings/floors** — if the primitive takes a threshold with
+  a meaningful upper or lower bound (e.g., a concentration fraction in
+  `(0, 1]`, a TVL floor ≥ 0), write an explicit test at the ceiling/floor
+  value. Session 2026-04-21 lost a cycle to a `>=` vs. `>` bug at
+  `threshold=1.0` that would have been caught here.
 
 ---
 
@@ -163,6 +168,35 @@ A primitive is shipped when:
 
 ---
 
+## 8. Composition primitives (additional guidance)
+
+A composition primitive is one that calls another primitive's `.apply()`
+internally rather than reading `lp` state directly. `DetectRugSignals` is
+the first such primitive (composes over `CheckPoolHealth`).
+
+Extra rules that apply when writing one:
+
+- **Read only the dependency's output, not raw `lp`.** If the data you
+  need isn't on the returned dataclass, either extend the dependency to
+  expose it or put the signal on a different primitive. Mixing direct
+  `lp.*` access with a composed primitive call makes the composability
+  claim leaky.
+- **Step through each threshold's ceiling case before writing the
+  comparator.** Strict vs. non-strict inequality matters at the
+  boundary. Pick the comparator per signal's intuitive meaning, not
+  by symmetry.
+- **V3 degradation is inherited.** If the dependency reports `None` for
+  V3 on a field you need (e.g., `CheckPoolHealth.num_swaps`), the
+  composing primitive must document that gracefully — either skip the
+  signal with a note in `details`, or raise cleanly. Do not silently
+  treat `None` as zero or false.
+- **Carry the dependency's result on your own result.** Callers who got
+  a useful verdict often want the underlying numbers. Keeping the
+  dataclass attached (e.g., `RugSignalReport.pool_health: PoolHealth`)
+  avoids a double-fetch and reinforces the composability pattern.
+
+---
+
 ## Completed primitives
 
 | Primitive | Category | Tests | Date |
@@ -171,3 +205,6 @@ A primitive is shipped when:
 | SimulatePriceMove | position/ | 21 | 2026-04-18 |
 | CalculateSlippage | execution/ | 20 | 2026-04-18 |
 | CheckTickRangeStatus | risk/ | 16 | 2026-04-18 |
+| FindBreakEvenPrice | position/ | 23 | 2026-04-18 |
+| CheckPoolHealth | pool_health/ | 24 | 2026-04-18 |
+| DetectRugSignals | pool_health/ | 23 | 2026-04-21 |
