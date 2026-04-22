@@ -72,6 +72,12 @@ Match `utils/data/PositionAnalysis.py`:
   input (e.g., AssessDepegRisk's value fields are `Optional[float]`
   because they're `None` when a requested depeg is physically
   unreachable for the pool's A).
+- **Signed-quantity conventions should be documented on the field itself.**
+  DetectFeeAnomaly's `discrepancy_bps` is signed (positive = pool
+  underdelivers, negative = overdelivers), and its `direction` field
+  restates that convention as a discrete label. Callers should be
+  able to read the field's dataclass docstring and know the sign
+  convention without reading the primitive's implementation.
 - Short class-level docstring explaining what the result represents.
 
 ---
@@ -125,6 +131,13 @@ amplification coefficient A), use a parameterized builder like
 (`TestAssessDepegRiskHighA` at A=200, `TestAssessDepegRiskLowA` at
 A=10). Each regime gets its own setUp and exercises the behavior the
 regime surfaces.
+
+**V3-rejection classes.** When a primitive is scoped V2-only (e.g.,
+DetectFeeAnomaly) or stableswap-only (e.g., AssessDepegRisk), include
+a dedicated small test class that wires up the *other* protocol's
+fixture and asserts the expected ValueError. Keeps the scope
+boundary visible in the test suite, not only in the docstring. See
+`TestDetectFeeAnomalyV3Rejection` for the minimal pattern.
 
 ### Example test class skeleton
 
@@ -192,6 +205,12 @@ Cover these categories (adapt naming to the primitive's semantics):
   precision. The reference and the primitive share a derivation but
   diverge in code paths; a bug in either shows up as a test mismatch.
   See `_reference_il` in `test_assess_depeg_risk.py`.
+- **Twin/state non-mutation** — any primitive that reads `lp` state and
+  claims to be non-mutating should have an explicit test asserting
+  reserves (and other mutable state) are unchanged after `.apply()`.
+  Matters especially for primitives that run synthetic trades through
+  the math (DetectFeeAnomaly, SimulatePriceMove) where the temptation
+  to actually execute on the pool is real.
 
 ---
 
@@ -324,6 +343,14 @@ math — a closed-form expansion of the stableswap invariant — in
 pure floats. No `get_y`, no `get_D`, no Newton iteration on pool
 state, no deep-copying of `math_pool`.
 
+`DetectFeeAnomaly` is a second, smaller example: the primitive
+computes theoretical swap output from the constant-product formula
+in pure floats, then compares to `lp.get_amount_out`. The V2 pool
+object is used only as a metadata source (reserves, token
+identities) plus a single query call for the actual output. The
+invariant math and the pool's math are the two things being
+compared; neither drives the other.
+
 ### 10a. When to use the invariant-math approach
 
 Prefer direct invariant evaluation when:
@@ -339,6 +366,10 @@ Prefer direct invariant evaluation when:
   tractable. For stableswap at N=2, the `ε ↔ δ` relationship is
   a 1D fixed point that converges in ~5 iterations. For N>2 or
   higher-order accuracy, it gets harder; scope honestly.
+- The primitive's purpose is a *consistency check* between
+  invariant math and pool math (DetectFeeAnomaly). Here the
+  invariant is the reference implementation; the pool is the
+  subject of the test.
 
 Prefer protocol-library-driven state threading when:
 
@@ -357,7 +388,7 @@ Three layers, cleanly separated:
 1. **Adapter layer**: extract scalars from the `lp` object.
    Keep this small (~20 lines). No math here.
 2. **Validation layer**: type check, parameter bounds,
-   protocol-specific constraints (e.g., N=2).
+   protocol-specific constraints (e.g., N=2, V2-only).
 3. **Computation layer**: pure-float math on the extracted
    scalars. No `lp` reference visible at this layer.
 
@@ -384,6 +415,34 @@ populated even in unreachable scenarios. Callers can check
 `il_pct is None` to distinguish reachable from unreachable
 without guessing at a sentinel value.
 
+### 10d. Scope honestly when the tooling diverges from expectations
+
+Session 2026-04-22's DetectFeeAnomaly discovered a latent issue
+during implementation: `UniV3Helper.quote` (the available
+non-mutating V3 quote path) hard-codes `fee = 997` rather than
+reading `lp.fee`. This means a 0.05% V3 pool's quote helper
+returns values as if fee were 0.3%, diverging from actual swap
+behavior. That's exactly the kind of internal inconsistency
+DetectFeeAnomaly was built to surface — but it also means the
+primitive can't trust the helper as a ground-truth "actual
+output" path on V3.
+
+The right response was to scope the primitive V2-only and
+document why, rather than paper over the issue with a synthetic
+fix. The V3 extension is tracked in the PROJECT_CONTEXT cleanup
+backlog; it needs a non-mutating V3 quote path that honors
+`lp.fee` before DetectFeeAnomaly can honestly extend to V3.
+
+The general pattern: when reading protocol-library source
+reveals that a needed helper has limitations the caller didn't
+expect, don't invent a workaround in the primitive layer.
+Scope the primitive narrower than planned, document the
+limitation, track the fix in the backlog, and ship small. Three
+primitives this month have done this (`CalculateSlippage`
+max-size V2-only, `CheckPoolHealth.num_swaps` V2-only,
+`DetectFeeAnomaly` V2-only); the pattern is honest and
+sustainable.
+
 ---
 
 ## Completed primitives
@@ -399,3 +458,4 @@ without guessing at a sentinel value.
 | DetectRugSignals | pool_health/ | 23 | 2026-04-21 |
 | AggregatePortfolio | portfolio/ | 21 | 2026-04-22 |
 | AssessDepegRisk | risk/ | 22 | 2026-04-22 |
+| DetectFeeAnomaly | pool_health/ | 20 | 2026-04-22 |

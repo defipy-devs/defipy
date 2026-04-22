@@ -43,7 +43,9 @@ The multi-protocol dispatch layer (`Swap`, `Join`, `AddLiquidity`, `RemoveLiquid
 
 Some primitives don't need a full state twin to answer their question — they need only the invariant that governs valid twin states. Session 2026-04-22 established this distinction concretely with `AssessDepegRisk`: instead of driving stableswappy's state-transition solvers to a counterfactual depegged state, the primitive extracts a handful of scalars (A, N, balances, LP supply) from the twin and evaluates the stableswap invariant directly in pure floats. The twin is still the source of *metadata*; the invariant is the source of *math*.
 
-Future primitives should ask: is this question about a *state* (use the protocol library's state-threading machinery) or about an *invariant* (evaluate the mathematical law directly)? Counterfactual questions at the edges of realistic pool operation — depeg scenarios, extreme-price simulations, out-of-envelope stress tests — often fall into the latter category. See `PRIMITIVE_AUTHORING_CHECKLIST.md` §10 for the full guidance.
+`DetectFeeAnomaly` is a second, smaller example of the same pattern: V2 pool state provides reserves and token identities (metadata), the constant-product-with-fee formula provides the theoretical output (invariant math), and the pool's own `get_amount_out` provides the actual output — the primitive is a consistency check between the two maths. Neither drives the other.
+
+Future primitives should ask: is this question about a *state* (use the protocol library's state-threading machinery) or about an *invariant* (evaluate the mathematical law directly)? Counterfactual questions at the edges of realistic pool operation — depeg scenarios, extreme-price simulations, out-of-envelope stress tests, fee-math consistency checks — often fall into the latter category. See `PRIMITIVE_AUTHORING_CHECKLIST.md` §10 for the full guidance.
 
 ### What the State Twin Enables
 
@@ -656,22 +658,42 @@ class PoolHealthReport:
 
 **Answers:** Q7.3
 
-**Constructor:** `DetectFeeAnomaly()`
+**Status:** ✅ Shipped 2026-04-22 (v1.2.0, V2-only). See v1 Implementation Notes below.
 
-**Signature:** `.apply(lp, token_in, test_amount) → FeeAnomalyResult`
+**Constructor (spec):** `DetectFeeAnomaly(discrepancy_threshold_bps=10.0)`
+
+**Signature (spec):** `.apply(lp, token_in, test_amount=None) → FeeAnomalyResult`
 
 **Returns:**
 ```python
 @dataclass
 class FeeAnomalyResult:
     stated_fee_bps: int
-    theoretical_output: float       # What math says you should get
-    actual_output: float            # What the contract returns (if available)
-    discrepancy_bps: float          # Difference in basis points
-    anomaly_detected: bool
+    test_amount: float
+    theoretical_output: float       # What math says you should get at stated fee
+    actual_output: float            # What lp.get_amount_out returns
+    discrepancy_bps: float          # Signed; positive = pool underdelivers
+    direction: str                  # "pool_underdelivers" | "pool_overdelivers"
+    anomaly_detected: bool          # |discrepancy_bps| > threshold
 ```
 
-**Internal calls:** `lp.get_amount_out()` vs `LPQuote.get_amount()` with fee parameters
+**Internal calls:** Constant-product-with-fee formula in pure floats, vs. `lp.get_amount_out()`.
+
+#### v1 Implementation Notes (2026-04-22)
+
+The shipped v1 is narrower than the initial spec sketch, scoped to answer the consistency question (Shape A) cleanly rather than the broader stated-vs-actual comparison question (Shape B).
+
+**Shape A only (invariant-vs-contract consistency).** v1 compares the pool's actual output against what the constant-product invariant predicts *at the pool's own stated fee*. It validates that pool behavior is internally consistent — that the contract's math does what the contract's fee parameter claims. What this catches: proxy wrappers silently reducing output (skim), implementation bugs in fee arithmetic, undocumented admin fees, integer-math rounding adversarial to the trader, reentrancy guards reducing return values, subsidy mechanisms that over-deliver. What it does NOT catch: an honestly-advertised high fee (a 1% pool whose math is internally consistent at 1% will show no anomaly). The broader Shape B (user-supplied expected fee) is deferrable to a future iteration as an optional `expected_fee_bps` parameter.
+
+**v1 is V2-only.** V2's fee is a protocol constant (30 bps via 997/1000 in the swap math); the pool object does not expose `.fee` and the constant is known. V3 extension is blocked by a latent issue in `UniV3Helper.quote`: it hard-codes `fee = 997` rather than reading `lp.fee`, so a 0.05% V3 pool's quote helper diverges from actual swap output at any non-30-bps fee tier. That's itself a fee-anomaly-in-the-tooling that DetectFeeAnomaly would rightly want to surface, but it means we can't use the helper as a ground-truth "actual output" path on V3 without first fixing the helper or introducing a non-mutating V3 quote path that honors `.fee`. Tracked in the cleanup backlog. V3 pools raise ValueError with a clear explanation; stableswap and Balancer also raise (different invariants, future work).
+
+**Direction classification is descriptive, not accusatory.** `direction` takes one of `"pool_underdelivers"` / `"pool_overdelivers"` — pure signed-discrepancy labels. Earlier framing considered `"pool_skimming"` which overreaches into attributing motive (not all underdelivery is malicious). The primitive observes; the caller — or an LLM layer, or a human — interprets whether observed underdelivery means a skim, a bug, an admin fee, or rounding. Consistent with DetectRugSignals' and AggregatePortfolio's "signal surfacer, not verdict generator" stance.
+
+**Both directions surfaced equally.** Unlike most fee-anomaly tools that only flag underdelivery, v1 reports overdelivery with the same clarity. Overdelivery is diagnostically important: it signals subsidies, fee-routing that bypasses the trader's receipt, implementation bugs in the trader's favor, or reward wrappers. An LLM doing forensic analysis of pool behavior should see both; the primitive provides the observation, the caller decides whether 30 bps of over-delivery is subsidy or bug.
+
+**Default test_amount: 1% of input reserve.** Small enough not to move the pool appreciably (so repeated calls are stable), large enough that float-vs-integer rounding noise stays well below the 10-bps default threshold. Callers can override with an explicit `test_amount` if they want to probe at a specific size. Typical clean-pool discrepancy in testing is ~1e-8 bps — ample headroom.
+
+See `python/prod/primitives/pool_health/DetectFeeAnomaly.py` for the implementation and its fuller docstring.
 
 ---
 
@@ -940,7 +962,7 @@ python/prod/
 | **Section 1 questions** | 38 |
 | **Question categories** | 9 |
 | **Section 2 primitives** | 19 |
-| **Primitives shipped (1.2.0 working)** | 9 |
+| **Primitives shipped (1.2.0 working)** | 10 |
 | **Primitive sub-packages** | 8 |
 | **New derivations required** | 4 (FindBreakEvenPrice, FindBreakEvenTime, max slippage inversion, tick traversal) |
 | **New derivations completed** | 2 (FindBreakEvenPrice, AssessDepegRisk stableswap-invariant expansion) |
