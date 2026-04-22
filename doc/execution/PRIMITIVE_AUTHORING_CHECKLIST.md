@@ -15,7 +15,7 @@ muscle memory, read it as a reference rather than a script.
 | What | Path |
 |---|---|
 | Implementation | `python/prod/primitives/<category>/<Primitive>.py` |
-| Result dataclass | `python/prod/utils/data/<Result>.py` |
+| Result dataclass | `python/prod/utils/data/<r>.py` |
 | Tests | `python/test/primitives/<category>/test_<primitive>.py` |
 
 Categories (from `DEFIMIND_TIER1_QUESTIONS.md`):
@@ -57,7 +57,13 @@ Match `primitives/position/AnalyzePosition.py` as the reference template:
 
 Match `utils/data/PositionAnalysis.py`:
 
-- One dataclass per file, same name as the file.
+- One dataclass per file, same name as the file — this is the default.
+- **Exception: nested components of a result can colocate with their
+  parent.** `PositionSummary` lives inside `PortfolioAnalysis.py` because
+  it's a structural piece of `PortfolioAnalysis` rather than a standalone
+  result. Use judgment: if a dataclass is only meaningful as a field of
+  another dataclass, colocate it; if it stands alone as a primitive
+  result, give it its own file.
 - Stdlib `@dataclass` decorator (not `attrs`).
 - Explicit field types on every field.
 - `Optional[T]` for fields that legitimately may be None.
@@ -77,7 +83,10 @@ Three places must be updated for a new primitive:
    If existing: already covered by the wildcard chain, nothing to do.
 
 3. **`python/prod/utils/data/__init__.py`** —
-   `from .<Result> import <Result>`
+   `from .<r> import <r>`
+   If the result file exports multiple dataclasses (e.g., a parent
+   result and a nested component), export all of them:
+   `from .<r> import <Parent>, <Nested>`
 
 ---
 
@@ -93,6 +102,15 @@ Use the shared fixtures from `python/test/primitives/conftest.py`:
 
 Both return dataclasses with `.lp`, `.eth`, `.dai`, `.lp_init_amt`,
 `.entry_x_amt`, `.entry_y_amt` (V3 adds `.lwr_tick`, `.upr_tick`).
+
+**Multi-pool tests.** If a primitive needs additional pools beyond the
+fixture's single V2 and single V3, build them inline with small helpers
+at the top of the test file. Don't extract a shared multi-pool fixture
+until the second consumer shows up — the right shape of the shared
+fixture is hard to guess from one consumer's needs (AggregatePortfolio
+wants uniform-numeraire portfolios; CompareProtocols will want
+cross-protocol pairs; CompareFeeTiers will want one pair at multiple
+fee tiers — unlikely to be solvable by one fixture).
 
 ### Example test class skeleton
 
@@ -151,6 +169,9 @@ Cover these categories (adapt naming to the primitive's semantics):
   `(0, 1]`, a TVL floor ≥ 0), write an explicit test at the ceiling/floor
   value. Session 2026-04-21 lost a cycle to a `>=` vs. `>` bug at
   `threshold=1.0` that would have been caught here.
+- **Breadth-chain totals** — for primitives that aggregate across N
+  positions or pools, explicitly test that scalar totals equal the sum
+  of per-item values, and that per-item ordering matches the input.
 
 ---
 
@@ -171,8 +192,9 @@ A primitive is shipped when:
 ## 8. Composition primitives (additional guidance)
 
 A composition primitive is one that calls another primitive's `.apply()`
-internally rather than reading `lp` state directly. `DetectRugSignals` is
-the first such primitive (composes over `CheckPoolHealth`).
+internally rather than reading `lp` state directly. DetectRugSignals
+(depth-chain over CheckPoolHealth) and AggregatePortfolio (breadth-chain
+over AnalyzePosition) are the two shapes shipped so far.
 
 Extra rules that apply when writing one:
 
@@ -192,8 +214,45 @@ Extra rules that apply when writing one:
   treat `None` as zero or false.
 - **Carry the dependency's result on your own result.** Callers who got
   a useful verdict often want the underlying numbers. Keeping the
-  dataclass attached (e.g., `RugSignalReport.pool_health: PoolHealth`)
-  avoids a double-fetch and reinforces the composability pattern.
+  dataclass attached (e.g., `RugSignalReport.pool_health: PoolHealth`,
+  `PositionSummary.analysis: PositionAnalysis`) avoids a double-fetch
+  and reinforces the composability pattern.
+
+### 8a. Depth-chain shape (one primitive composed over another)
+
+- Single dependency call, result feeds threshold logic or derived signals.
+- Output is typically one dataclass with signal booleans and a summary
+  field.
+- Example: `DetectRugSignals` → `CheckPoolHealth` → `RugSignalReport`.
+
+### 8b. Breadth-chain shape (same primitive applied N times)
+
+- Input is a list of items; primitive iterates, calls the dependency on
+  each, and aggregates.
+- Require shape homogeneity at the input level — raise cleanly if inputs
+  mix incompatible shapes (e.g., AggregatePortfolio requires uniform
+  token0 across positions).
+- Preserve caller input order in the per-item result list; expose
+  ordering-by-metric via a separate ranking field.
+- Totals in scalar fields should match per-item sums; include an
+  explicit test that does `sum(item.X for item in positions) ==
+  total_X`.
+- Example: `AggregatePortfolio` → N × `AnalyzePosition` →
+  `PortfolioAnalysis`.
+
+### 8c. Field naming for composition primitives
+
+- **Signal surfacer, not verdict generator.** `pnl_ranking` not
+  `exit_priority`; `shared_exposure_warnings` not `correlation_warnings`;
+  `signals_detected` not `is_rug`. The primitive exposes numbers and
+  orderings; the judgment belongs to the caller.
+- **Spec-level verdict names are a recurring pattern worth pushing back
+  on during design.** The Tier 1 spec was written at a higher level of
+  abstraction than the primitives themselves, and some of its field
+  names (`correlation_warnings`, `exit_priority`, `recommendation`)
+  overpromise what the math actually delivers. Rename during design
+  with the user's sign-off; document the rename reasoning in the
+  primitive's docstring Notes section.
 
 ---
 
@@ -208,3 +267,4 @@ Extra rules that apply when writing one:
 | FindBreakEvenPrice | position/ | 23 | 2026-04-18 |
 | CheckPoolHealth | pool_health/ | 24 | 2026-04-18 |
 | DetectRugSignals | pool_health/ | 23 | 2026-04-21 |
+| AggregatePortfolio | portfolio/ | 21 | 2026-04-22 |
