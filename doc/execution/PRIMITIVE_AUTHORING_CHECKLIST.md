@@ -61,12 +61,17 @@ Match `utils/data/PositionAnalysis.py`:
 - **Exception: nested components of a result can colocate with their
   parent.** `PositionSummary` lives inside `PortfolioAnalysis.py` because
   it's a structural piece of `PortfolioAnalysis` rather than a standalone
-  result. Use judgment: if a dataclass is only meaningful as a field of
-  another dataclass, colocate it; if it stands alone as a primitive
-  result, give it its own file.
+  result. `DepegScenario` lives inside `DepegRiskAssessment.py` for the
+  same reason. Use judgment: if a dataclass is only meaningful as a
+  field of another dataclass, colocate it; if it stands alone as a
+  primitive result, give it its own file.
 - Stdlib `@dataclass` decorator (not `attrs`).
 - Explicit field types on every field.
-- `Optional[T]` for fields that legitimately may be None.
+- `Optional[T]` for fields that legitimately may be None — including
+  fields that are populated only in certain regimes of the primitive's
+  input (e.g., AssessDepegRisk's value fields are `Optional[float]`
+  because they're `None` when a requested depeg is physically
+  unreachable for the pool's A).
 - Short class-level docstring explaining what the result represents.
 
 ---
@@ -111,6 +116,15 @@ fixture is hard to guess from one consumer's needs (AggregatePortfolio
 wants uniform-numeraire portfolios; CompareProtocols will want
 cross-protocol pairs; CompareFeeTiers will want one pair at multiple
 fee tiers — unlikely to be solvable by one fixture).
+
+**Parameterized builders for regime coverage.** When a primitive's
+behavior changes with a pool parameter (e.g., AssessDepegRisk's
+behavior flips between reachable and unreachable regimes based on
+amplification coefficient A), use a parameterized builder like
+`_build_pool(ampl, n_assets=2)` and split the test class by regime
+(`TestAssessDepegRiskHighA` at A=200, `TestAssessDepegRiskLowA` at
+A=10). Each regime gets its own setUp and exercises the behavior the
+regime surfaces.
 
 ### Example test class skeleton
 
@@ -172,6 +186,12 @@ Cover these categories (adapt naming to the primitive's semantics):
 - **Breadth-chain totals** — for primitives that aggregate across N
   positions or pools, explicitly test that scalar totals equal the sum
   of per-item values, and that per-item ordering matches the input.
+- **Independent-oracle cross-check** — for invariant-math primitives
+  (see §10), write a separate reference implementation of the same
+  math in the test file and assert the primitive matches it to tight
+  precision. The reference and the primitive share a derivation but
+  diverge in code paths; a bug in either shows up as a test mismatch.
+  See `_reference_il` in `test_assess_depeg_risk.py`.
 
 ---
 
@@ -256,6 +276,116 @@ Extra rules that apply when writing one:
 
 ---
 
+## 9. The "three rounds, then rethink" rule
+
+If a primitive's implementation has required three or more rounds of
+local fixes against failing tests, stop adding fixes and reconsider
+the approach. The fourth fix is almost never the right move.
+
+Pattern that emerged in session 2026-04-22 on `AssessDepegRisk`:
+
+- Round 1: modeling error (wrong function to compute LP value)
+- Round 2: unit-conversion bug in the same code path
+- Round 3: reachability assumption violated by the engine's
+  non-convergence regime
+- Round 4: would have been another local patch against the same
+  structurally-wrong approach
+
+The *approach* was "drive stableswappy's integer-math Newton solver
+to a target counterfactual state, then read balances out." The
+solver wasn't designed for that kind of backward reconstruction at
+extreme balance ratios, and each local fix was papering over a
+symptom of that mismatch. Rewriting the primitive to evaluate the
+stableswap invariant directly in floats (Option B in the session
+transcript) shipped first try with 22 tests passing.
+
+Concrete rule: when you reach round 3, before patching further, ask:
+"is this approach compatible with what my dependency was designed
+for?" If no, propose an alternative approach, name it explicitly
+(not as a disguised patch), and get user sign-off before reimplementing.
+
+---
+
+## 10. Invariant-math primitives
+
+Most primitives in DeFiPy drive the protocol library — they ask the
+pool object "what would happen if this trade or composition change
+were applied." Some primitives answer a different kind of question:
+"what's the relationship between pool composition and price, given
+the invariant the pool obeys?" For those questions, evaluating the
+invariant directly in floats is often cleaner than driving the
+protocol library's state-transition machinery to a counterfactual
+target.
+
+`AssessDepegRisk` is the first primitive of this shape. It uses
+stableswappy as a read-only metadata adapter (`isinstance` check,
+`A`, `N`, balances, LP supply, decimals) and performs the core
+math — a closed-form expansion of the stableswap invariant — in
+pure floats. No `get_y`, no `get_D`, no Newton iteration on pool
+state, no deep-copying of `math_pool`.
+
+### 10a. When to use the invariant-math approach
+
+Prefer direct invariant evaluation when:
+
+- The question is about a *counterfactual pool state* the caller
+  specifies (e.g., "what if dydx were X?"), and the protocol
+  library doesn't have a cheap/safe way to construct that state.
+- The protocol library's solvers (Newton loops, integer-math
+  convergence) don't have iteration caps, and the state the
+  caller wants is at the edge of or past the solvers' designed
+  operating envelope.
+- A closed-form or fixed-point expansion of the invariant is
+  tractable. For stableswap at N=2, the `ε ↔ δ` relationship is
+  a 1D fixed point that converges in ~5 iterations. For N>2 or
+  higher-order accuracy, it gets harder; scope honestly.
+
+Prefer protocol-library-driven state threading when:
+
+- The question is about a *forward trajectory*: "if I do this
+  swap, then this deposit, what happens?" The protocol library
+  is specifically designed for that and its solvers are well-
+  conditioned on the regime.
+- The question requires fee accounting, admin-fee handling, or
+  other protocol-specific bookkeeping that lives in the library
+  and isn't part of the pure invariant.
+
+### 10b. Implementation pattern
+
+Three layers, cleanly separated:
+
+1. **Adapter layer**: extract scalars from the `lp` object.
+   Keep this small (~20 lines). No math here.
+2. **Validation layer**: type check, parameter bounds,
+   protocol-specific constraints (e.g., N=2).
+3. **Computation layer**: pure-float math on the extracted
+   scalars. No `lp` reference visible at this layer.
+
+Future consideration: if a second primitive wants the same
+computation layer, extract it as a module-level pure function
+and have the primitive call it. The split gives quants a direct
+math entry point separate from the LP-adapter entry point. No
+current primitive needs this refactor, but the structure supports
+it cleanly when it arrives.
+
+### 10c. Reachability semantics
+
+Invariant-math primitives can be asked questions that have no
+physical solution (e.g., "IL at δ=0.02 in a pool with A=200"
+requires `|ε| > 1`, which violates the invariant). When this
+happens, the primitive should flag unreachability explicitly,
+not silently return the closest reachable approximation.
+
+Convention: fields that depend on a reachable pool state are
+`Optional[T]`, set to `None` when the target is unreachable.
+Fields independent of pool state (e.g., the V2 closed-form
+comparison in `DepegScenario.v2_il_comparison`) remain
+populated even in unreachable scenarios. Callers can check
+`il_pct is None` to distinguish reachable from unreachable
+without guessing at a sentinel value.
+
+---
+
 ## Completed primitives
 
 | Primitive | Category | Tests | Date |
@@ -268,3 +398,4 @@ Extra rules that apply when writing one:
 | CheckPoolHealth | pool_health/ | 24 | 2026-04-18 |
 | DetectRugSignals | pool_health/ | 23 | 2026-04-21 |
 | AggregatePortfolio | portfolio/ | 21 | 2026-04-22 |
+| AssessDepegRisk | risk/ | 22 | 2026-04-22 |

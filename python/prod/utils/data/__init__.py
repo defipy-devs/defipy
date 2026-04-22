@@ -10,3 +10,4 @@ from .PoolHealth import PoolHealth
 from .RugSignalReport import RugSignalReport
 from .PortfolioPosition import PortfolioPosition
 from .PortfolioAnalysis import PortfolioAnalysis, PositionSummary
+from .DepegRiskAssessment import DepegRiskAssessment, DepegScenario

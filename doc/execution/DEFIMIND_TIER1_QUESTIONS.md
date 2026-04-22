@@ -39,6 +39,12 @@ Every diagnostic question in this catalog operates on the State Twin, not the ch
 
 The multi-protocol dispatch layer (`Swap`, `Join`, `AddLiquidity`, `RemoveLiquidity`) routes operations to the correct twin based on exchange type, enabling cross-protocol analysis within a single diagnostic session.
 
+### State Twin vs. Invariant Math
+
+Some primitives don't need a full state twin to answer their question — they need only the invariant that governs valid twin states. Session 2026-04-22 established this distinction concretely with `AssessDepegRisk`: instead of driving stableswappy's state-transition solvers to a counterfactual depegged state, the primitive extracts a handful of scalars (A, N, balances, LP supply) from the twin and evaluates the stableswap invariant directly in pure floats. The twin is still the source of *metadata*; the invariant is the source of *math*.
+
+Future primitives should ask: is this question about a *state* (use the protocol library's state-threading machinery) or about an *invariant* (evaluate the mathematical law directly)? Counterfactual questions at the edges of realistic pool operation — depeg scenarios, extreme-price simulations, out-of-envelope stress tests — often fall into the latter category. See `PRIMITIVE_AUTHORING_CHECKLIST.md` §10 for the full guidance.
+
 ### What the State Twin Enables
 
 - **Position diagnostics** — decompose PnL into IL, fee income, and price impact by replaying the twin from entry state to current state
@@ -382,26 +388,47 @@ class BreakEvenTimeResult:
 
 **Answers:** Q2.3
 
-**Constructor:** `AssessDepegRisk(depeg_levels=[0.02, 0.05, 0.10])`
+**Status:** ✅ Shipped 2026-04-22 (v1.2.0). See v1 Implementation Notes below.
 
-**Signature:** `.apply(lp, position_size_lp) → DepegRiskAssessment`
+**Constructor (spec):** `AssessDepegRisk()`
+
+**Signature (spec):** `.apply(lp, lp_init_amt, depeg_token, depeg_levels=None, compare_v2=True) → DepegRiskAssessment`
 
 **Returns:**
 ```python
 @dataclass
 class DepegScenario:
     depeg_pct: float
-    il_at_depeg: float
-    position_value_at_depeg: float
+    peg_price: float
+    lp_value_at_depeg: Optional[float]       # None if unreachable
+    hold_value_at_depeg: Optional[float]     # None if unreachable
+    il_pct: Optional[float]                   # None if unreachable
+    v2_il_comparison: Optional[float]         # V2 IL benchmark, always populated
 
 @dataclass
 class DepegRiskAssessment:
-    protocol_type: str          # "stableswap" | "constant_product" | "weighted"
-    scenarios: list[DepegScenario]
+    depeg_token: str
+    protocol_type: str                        # "stableswap" for v1
+    n_assets: int
     current_peg_deviation: float
+    scenarios: List[DepegScenario]
 ```
 
-**Internal calls:** Stableswap invariant evaluation, `UniswapImpLoss.calc_iloss()` for comparison
+#### v1 Implementation Notes (2026-04-22)
+
+The shipped v1 is narrower than the spec initially envisioned but more honest about what the math delivers. Key differences from the Primitive 5 design sketch above:
+
+**v1 is N=2 only.** The closed-form expansion of the stableswap invariant used in v1 is specific to 2-asset pools. The derivation generalizes in principle to N>2 but not cleanly — N>2 is explicitly deferred to a future release. Passing an N>2 lp raises ValueError.
+
+**v1 uses analytical invariant evaluation, not state twin mutation.** Initial implementation attempts tried to drive stableswappy's integer-math Newton solvers to a target dydx state by bisecting on balance multipliers. That approach ran into three rounds of unit-conversion and non-convergence issues before being replaced with the current analytical approach: parameterize the invariant by `ε = (x-y)/(x+y)`, derive `δ = 1 - dydx` as a function of (ε, A), invert via fixed-point iteration, and compute IL from the closed-form LP vs. hold value expressions. The primitive reads a handful of metadata scalars from the `lp` object (A, N, balances, LP supply, decimals) and does the core math in pure floats — no `get_y`, no `get_D`, no Newton iteration on state, no deep-copying of `math_pool`.
+
+**Reachability is a first-class output, not a silent assumption.** The shipped primitive recognizes that for high-A pools, small depeg targets require physically impossible pool compositions (|ε| > 1). These are flagged with `il_pct = None` rather than returning a fabricated number. At A=200, depegs of 2% are unreachable; at A=10 they're cleanly reachable. Callers check `il_pct is None` to distinguish the two regimes. The V2 benchmark remains populated even in unreachable scenarios so callers see a reference point regardless.
+
+**V2 comparison reveals a counterintuitive truth.** The popular narrative "stableswap has lower IL than V2 for the same price deviation" is true per unit of trading volume but false per unit of price deviation. At high A, stableswap actually has *larger* absolute IL than V2 at the same δ, because the flat curve forces large composition shifts to move price even slightly. This is Cintra & Holloway's "strong negative convexity." The primitive reports both numbers side-by-side so the shape is visible.
+
+**Realistic envelope.** The leading-order expansion is highly accurate for small-to-moderate ε (say |ε| < 0.8). For near-drained pools the higher-order terms matter more. In practice this covers all realistic depeg events at common A values; exotic cases may need the N>2 or higher-order-accuracy extensions tracked for future work.
+
+See `python/prod/primitives/risk/AssessDepegRisk.py` for the derivation (in the class docstring) and full implementation.
 
 ---
 
@@ -913,8 +940,10 @@ python/prod/
 | **Section 1 questions** | 38 |
 | **Question categories** | 9 |
 | **Section 2 primitives** | 19 |
+| **Primitives shipped (1.2.0 working)** | 9 |
 | **Primitive sub-packages** | 8 |
 | **New derivations required** | 4 (FindBreakEvenPrice, FindBreakEvenTime, max slippage inversion, tick traversal) |
+| **New derivations completed** | 2 (FindBreakEvenPrice, AssessDepegRisk stableswap-invariant expansion) |
 | **Day-one launch blockers** | 0 |
 
 ---
