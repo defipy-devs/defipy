@@ -64,9 +64,9 @@ setup(name='DeFiPy',
           'termcolor >= 2.4.0',
           'bokeh >= 3.3',
           # DeFiPy protocol packages
-          'uniswappy >= 1.7.7',
-          'balancerpy >= 1.0.6',
-          'stableswappy >= 1.0.5',
+          'uniswappy >= 1.7.9',
+          'balancerpy >= 1.1.0',
+          'stableswappy >= 1.1.0',
       ],
       extras_require={
           # [book]: for readers of 'Hands-On AMMs with Python'.
