@@ -20,3 +20,4 @@ from .DepositSplitResult import DepositSplitResult
 from .RebalanceCostReport import RebalanceCostReport
 from .TickRangeCandidate import TickRangeCandidate
 from .TickRangeEvaluation import TickRangeEvaluation, RangeMetrics
+from .ProtocolComparison import ProtocolComparison, ProtocolMetrics
