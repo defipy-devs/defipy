@@ -12,3 +12,5 @@ from .PortfolioPosition import PortfolioPosition
 from .PortfolioAnalysis import PortfolioAnalysis, PositionSummary
 from .DepegRiskAssessment import DepegRiskAssessment, DepegScenario
 from .FeeAnomalyResult import FeeAnomalyResult
+from .FeeTierCandidate import FeeTierCandidate
+from .FeeTierComparison import FeeTierMetrics, FeeTierComparison

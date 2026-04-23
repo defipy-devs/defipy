@@ -26,7 +26,7 @@ As of 1.2.0, the go-forward architecture centers on composable **primitives** �
 
 Each primitive follows the DeFiPy contract: stateless construction, computation at `.apply()`, structured dataclass return.
 
-**Ten primitives shipped as of the 1.2.0 working branch:**
+**Eleven primitives shipped as of the 1.2.0 working branch:**
 
 | Primitive | Category | Answers | Tests |
 |---|---|---|---|
@@ -40,8 +40,9 @@ Each primitive follows the DeFiPy contract: stateless construction, computation 
 | `AggregatePortfolio` | portfolio/ | Q6.1–Q6.3 (N-position aggregation + shared-exposure) | 21 |
 | `AssessDepegRisk` | risk/ | Q2.3 (stableswap depeg scenarios, N=2) | 22 |
 | `DetectFeeAnomaly` | pool_health/ | Q7.3 (invariant-vs-contract fee consistency, V2) | 20 |
+| `CompareFeeTiers` | comparison/ | Q4.3 (V3 fee-tier comparison, N candidates) | 21 |
 
-Full suite: **225 tests passing** (primitives + fixture smoke tests). The full 19-primitive inventory and LP-question mapping lives in `doc/execution/DEFIMIND_TIER1_QUESTIONS.md`. Authoring conventions (file layout, style, test coverage, `__init__.py` wiring) are in `doc/execution/PRIMITIVE_AUTHORING_CHECKLIST.md`.
+Full suite: **246 tests passing** (primitives + fixture smoke tests). The full 19-primitive inventory and LP-question mapping lives in `doc/execution/DEFIMIND_TIER1_QUESTIONS.md`. Authoring conventions (file layout, style, test coverage, `__init__.py` wiring) are in `doc/execution/PRIMITIVE_AUTHORING_CHECKLIST.md`.
 
 ### Legacy Agents (frozen for book chapter 9)
 
@@ -77,9 +78,11 @@ These are not obvious from reading any single file. They surfaced during primiti
 
 - **Numeraire convention: token0.** All position values, fees, and TVL figures are expressed in token0 units unless explicitly stated. Callers can re-denominate as needed. Enforced across AnalyzePosition, SimulatePriceMove, FindBreakEvenPrice, CheckPoolHealth, DetectRugSignals, AggregatePortfolio. For stableswap primitives like AssessDepegRisk, values are in peg-numeraire (token0 ≈ token1 ≈ $1 at peg), which falls out of the derivation naturally.
 
-- **Uniform-numeraire as a v1 design stance for multi-position primitives.** AggregatePortfolio requires all input positions to share a common token0 and raises `ValueError` on mismatch rather than silently summing across incompatible units. The error message explicitly directs the user to group by token0 and call multiple times. This is the v1 scope; a multi-numeraire version can come later if the cross-numeraire case turns out to be common. The same stance will likely apply to future comparison primitives (CompareProtocols, CompareFeeTiers) — define scope by rejecting shape mismatches rather than papering over them.
+- **Uniform-numeraire / common-pair as a v1 design stance for multi-input primitives.** AggregatePortfolio requires all input positions to share a common token0; CompareFeeTiers requires all candidates to share both token0 and token1 (same pair). Both raise `ValueError` with an index-identifying message on mismatch rather than silently summing or ranking across incompatible units. The error messages direct the caller to group by the mismatched axis and call multiple times. A multi-numeraire version can come later if the cross-numeraire case turns out to be common. The same stance will likely apply to CompareProtocols — define scope by rejecting shape mismatches rather than papering over them.
 
-- **V2 has per-swap fee history (`fee0_arr`, `fee1_arr`); V3 does not.** V3 accumulates `feeGrowthGlobal0X128` / `feeGrowthGlobal1X128` and derives `collected_fee*` lazily via `_update_fees()`. Primitives that rely on swap history (e.g., `CheckPoolHealth.fee_accrual_rate_recent`, `DetectRugSignals.inactive_with_liquidity`) return `None` / `False` for V3 and document why.
+- **V2 has per-swap fee history (`fee0_arr`, `fee1_arr`); V3 does not.** V3 accumulates `feeGrowthGlobal0X128` / `feeGrowthGlobal1X128` and derives `collected_fee*` via `_update_fees()`. Primitives that rely on swap *history* (e.g., `CheckPoolHealth.fee_accrual_rate_recent`, `DetectRugSignals.inactive_with_liquidity`) return `None` / `False` for V3 and document why.
+
+- **V3 `collected_fee0` / `collected_fee1` update synchronously during `Swap().apply()`.** Correcting an earlier misreading: V3's fee-growth accumulators get converted to `collected_fee0/1` as part of the swap path, not lazily on a later trigger. `CheckPoolHealth.total_fee0 / total_fee1` show the updated values immediately. This was verified during CompareFeeTiers test authoring — a single swap on a V3 pool populates `collected_fee0` visible through `CheckPoolHealth`. What V3 does *not* have is per-swap history (no `fee0_arr`), only the running accumulator — so rate/window metrics remain V2-only, but point-in-time totals are available on both protocols.
 
 - **V2 `liquidity_providers` has a `"0"` sentinel** for the `MINIMUM_LIQUIDITY` burn at first mint. Exclude it from LP counting and concentration metrics.
 
@@ -127,7 +130,7 @@ pytest python/test/primitives/ -v
 ./resources/run_clean_test_suite.sh --with-defipy
 ```
 
-**Working-branch state: 225 tests passing.**
+**Working-branch state: 246 tests passing.**
 
 ## Usage Patterns
 
@@ -144,6 +147,8 @@ from defipy import (
     PortfolioPosition,
     AssessDepegRisk,
     DetectFeeAnomaly,
+    CompareFeeTiers,
+    FeeTierCandidate,
 )
 
 # Position analysis
@@ -217,16 +222,34 @@ anomaly = DetectFeeAnomaly().apply(v2_lp, eth_token)
 #                   direction ∈ {"pool_underdelivers", "pool_overdelivers"},
 #                   anomaly_detected)
 # Default threshold 10 bps; adjustable via constructor.
+
+# V3 fee-tier comparison (breadth-chain over CheckPoolHealth + CheckTickRangeStatus)
+comparison = CompareFeeTiers().apply([
+    FeeTierCandidate(lp = lp_5bps,   position_size_lp = amt_5,
+                     lwr_tick = l5, upr_tick = u5),
+    FeeTierCandidate(lp = lp_30bps,  position_size_lp = amt_30,
+                     lwr_tick = l30, upr_tick = u30),
+    FeeTierCandidate(lp = lp_100bps, position_size_lp = amt_100,
+                     lwr_tick = l100, upr_tick = u100),
+])
+# → FeeTierComparison(numeraire, pair, tiers, ranking_by_observed_fee_yield,
+#                    ranking_by_tvl, notes)
+# Each FeeTierMetrics has:
+#   name, fee_tier_bps, pool_tvl_in_token0,
+#   observed_fee_yield (Optional — cumulative, not annualized),
+#   in_range, range_width_pct
+# Reports observed yield (cumulative fees / TVL), not a forecast —
+# callers who know pool age annualize themselves.
 ```
 
 ## Next Phase
 
 ### Recommended opener for next session
 
-1. Verify 1.2.0 working-branch state: `pytest python/test/primitives/ -v` should show 225 passing.
-2. Pick primitive #11 from the candidate list below.
+1. Verify 1.2.0 working-branch state: `pytest python/test/primitives/ -v` should show 246 passing.
+2. Pick primitive #12 from the candidate list below.
 
-### Primitive #11 candidates, with reasoning
+### Primitive #12 candidates, with reasoning
 
 **Strongest lean: `OptimalDepositSplit` V2-only** (P2, optimization/).
 - V2 has a clean closed form (the Uniswap V2 zap-in quadratic); ships a new category (optimization/) and new primitive shape (returns optimal parameters rather than metrics)
@@ -244,15 +267,15 @@ anomaly = DetectFeeAnomaly().apply(v2_lp, eth_token)
 - V3-only by definition. No V2 degradation path needed.
 - Estimated ~60 min; touches UniV3Helper and TickMath.
 
-**Deferred: `EvaluateRebalance` full**, `AssessLiquidityDepth`, `CompareProtocols`, `CompareFeeTiers`.
+**Deferred: `EvaluateRebalance` full**, `AssessLiquidityDepth`, `CompareProtocols`.
 - `EvaluateRebalance` full needs `WithdrawSwap` / `SwapDeposit` / `OptimalDepositSplit` as dependencies — OptimalDepositSplit would unlock this
 - `AssessLiquidityDepth` needs V3 tick-walking that doesn't exist in the codebase yet; deserves a dedicated session
-- `CompareProtocols` and `CompareFeeTiers` both want multi-pool fixtures beyond what's in conftest; the fixture design will be cleaner after we've seen two concrete consumers (currently only AggregatePortfolio)
+- `CompareProtocols` wants a cross-protocol multi-pool fixture beyond what's in conftest; CompareFeeTiers showed the inline-helper pattern (`_build_v3_pool_at_fee`) scales fine for up to 4 pools, so a shared fixture isn't urgent yet
 
 **Full remaining inventory by priority:**
 - **P1 remaining**: `AssessLiquidityDepth`
 - **P2 — Optimization**: `OptimalDepositSplit`, `EvaluateRebalance`, `EvaluateTickRanges`
-- **P3 — Comparison**: `CompareProtocols`, `CompareFeeTiers`
+- **P3 — Comparison**: `CompareProtocols`
 - **P5 — Advanced**: `FindBreakEvenTime`, `DetectMEV`, `DiscoverPools`
 
 Full LP-question mapping and signatures for all 19 primitives live in `doc/execution/DEFIMIND_TIER1_QUESTIONS.md`. Read that doc for any primitive not covered above before designing — the spec has exact signatures that should not be guessed.
@@ -285,7 +308,8 @@ python/prod/
 │   ├── execution/           # CalculateSlippage
 │   ├── risk/                # CheckTickRangeStatus, AssessDepegRisk
 │   ├── pool_health/         # CheckPoolHealth, DetectRugSignals, DetectFeeAnomaly
-│   └── portfolio/           # AggregatePortfolio
+│   ├── portfolio/           # AggregatePortfolio
+│   └── comparison/          # CompareFeeTiers
 ├── agents/                  # Legacy — frozen for book chapter 9
 ├── cpt/quote/               # Core pricing/liquidity (re-exports from uniswappy)
 ├── cpt/index/               # Mathematical inverse relationships
@@ -296,7 +320,8 @@ python/prod/
                                RugSignalReport, PortfolioPosition,
                                PortfolioAnalysis (+ nested PositionSummary),
                                DepegRiskAssessment (+ nested DepegScenario),
-                               FeeAnomalyResult
+                               FeeAnomalyResult, FeeTierCandidate,
+                               FeeTierComparison (+ nested FeeTierMetrics)
 
 doc/
 ├── PROJECT_CONTEXT.md                              # This file
@@ -391,7 +416,23 @@ Three-primitive session. The longest single session to date, and the most archit
 
 - **State at close**: 225 tests passing. All three doc files (PROJECT_CONTEXT, PRIMITIVE_AUTHORING_CHECKLIST, DEFIMIND_TIER1_QUESTIONS) updated to reflect #8, #9, and #10 ships plus the invariant-math architectural pattern, the three-rounds-then-rethink rule, the V2-vs-V3 fee asymmetry, and the new UniV3Helper backlog item.
 
-Next session should pick primitive #11 from the candidates above. `OptimalDepositSplit` (V2-only) is the strongest lean — opens optimization/, uses a known closed form, unblocks EvaluateRebalance downstream.
+### Session 2026-04-23: primitive #11 (CompareFeeTiers)
+
+Single-primitive session. Opened new `comparison/` category, shipped the first V3-only breadth-chain primitive, and corrected an earlier misread about V3 fee accounting.
+
+**Primitive #11 — CompareFeeTiers** (comparison/, 21 tests). Compares N V3 pools at different fee tiers for the same token pair. Breadth-chains `CheckPoolHealth` + `CheckTickRangeStatus` across inputs; reports per-tier metrics (fee_tier_bps, pool_tvl_in_token0, observed_fee_yield, in_range, range_width_pct) plus independent orderings by observed yield and by TVL. New result dataclasses: `FeeTierCandidate` (input container), `FeeTierMetrics` (per-tier, nested), `FeeTierComparison` (result).
+
+- **Mode B execution was clean and fast.** Read `UniswapV3Exchange.__init__` (to confirm `self.fee` storage in pips), `UniV3Helper.quote` (to confirm the backlogged hard-coded-997 issue is orthogonal — we don't need the helper for this primitive), `CheckPoolHealth.apply()` (to confirm V3's fee accounting path), and the AggregatePortfolio test file (to lift the inline pool-building pattern). Zero mid-implementation surprises. Validates the rule: a full dependency-read pass before designing saves more time than it costs.
+- **Spec-level deviations accepted up-front.** The DEFIMIND_TIER1_QUESTIONS spec proposed `fee_income_estimate`, `net_return`, and `optimal_tier: int`. All three were dropped: the first two require a forward volume model the primitive can't honestly ground (the pool object has no volume projection); the third is a verdict field, inconsistent with the signal-surfacer convention. Replaced with `observed_fee_yield` (cumulative fees / TVL in token0 — a rate, not a forecast) and two independent rankings. User signed off on all three deviations before code.
+- **`observed_fee_apr` → `observed_fee_yield` mid-implementation.** Caught during the dataclass write: the pool object carries no real-world duration, so an "APR" figure requires a caller-supplied age and would either be dishonest (guessing at age) or always-None (when age is unsupplied). Cumulative yield is honest and composes cleanly — callers who know pool age annualize themselves. This is the kind of naming tightening heuristic #6 is about; I made the call and continued without pinging for approval because it was a strict honesty improvement, not a shape change.
+- **Correction to an earlier convention note.** PROJECT_CONTEXT previously described V3 `collected_fee*` as lazily derived via `_update_fees()`. The CompareFeeTiers test `test_none_yield_pools_sort_last` drives a single swap through `Swap().apply()` and asserts the active pool ranks ahead of the quiet one by observed yield — this passed on the first run, which means `collected_fee0` DOES update synchronously during the swap path. The Key Internal Conventions section was updated to reflect this: V3 has the running accumulator available at all times, it just doesn't have per-swap history (`fee0_arr`). Point-in-time fee totals are V2+V3; rate/window metrics are V2-only. This distinction matters for future primitive design — any primitive needing cumulative-fees-since-deployment works on both protocols.
+- **Notes-as-informational, not-warnings.** The `notes: list[str]` field on FeeTierComparison explicitly calls out conditions a caller might overlook (no accumulated fees → yield is None; candidate out of range) but does NOT duplicate information directly visible on the per-tier metrics dataclass. This is the right boundary for a breadth-chain composition: notes surface conditions that affect interpretation of the rankings without editorializing the rankings themselves.
+- **Inline-helper pattern continues to scale.** `_build_v3_pool_at_fee(fee_pips, address_suffix)` builds an arbitrary-tier V3 pool with fresh ERC20 tokens, factory, and Join(). Supports up to 4 pools in a single test (canonical tier extraction test exercises 100/500/3000/10000 pips simultaneously). Shared multi-pool fixture remains deferred — AggregatePortfolio and CompareFeeTiers are the only two multi-pool consumers to date, both use inline helpers successfully, and the shape a shared fixture would need depends heavily on what CompareProtocols eventually looks like.
+- **Zero mid-session redesigns, zero test-caught bugs, 21 tests passing on first run.** Attributed to the (by-now-ritualized) up-front design conversation — Shape A vs B vs C settled with user sign-off, three spec-level deviations reviewed before code, dataclass field names argued through in prose before the first keystroke. This is what sessions are supposed to look like when heuristic #7 is followed.
+
+- **State at close**: 246 tests passing. All three doc files updated. CompareFeeTiers moves from P3 remaining to shipped; P3 now holds only CompareProtocols.
+
+Next session should pick primitive #12 from the candidates above. `OptimalDepositSplit` (V2-only) remains the strongest lean — opens optimization/, uses a known closed form, unblocks EvaluateRebalance downstream.
 
 ## MCP Setup (for Claude.ai sessions)
 

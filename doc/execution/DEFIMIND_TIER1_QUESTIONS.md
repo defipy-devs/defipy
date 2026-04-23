@@ -573,11 +573,13 @@ class ProtocolComparison:
 
 **Answers:** Q4.3
 
-**Constructor:** `CompareFeeTiers()`
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, V3-only). See v1 Implementation Notes below.
 
-**Signature:** `.apply(lp, position_size, fee_tiers=[100, 500, 3000, 10000]) → FeeTierComparison`
+**Constructor (spec):** `CompareFeeTiers()`
 
-**Returns:**
+**Signature (spec):** `.apply(lp, position_size, fee_tiers=[100, 500, 3000, 10000]) → FeeTierComparison`
+
+**Returns (spec):**
 ```python
 @dataclass
 class FeeTierMetrics:
@@ -593,6 +595,28 @@ class FeeTierComparison:
 ```
 
 **Internal calls:** V3 math at different fee parameters, volume estimation from reserves
+
+#### v1 Implementation Notes (2026-04-23)
+
+The shipped v1 diverges from the spec above in shape *and* in what it promises. The differences were deliberate, settled up-front with user sign-off, and driven by what the math and the protocol library can honestly deliver.
+
+**Multi-pool input, not single-pool reparameterization.** The spec's `.apply(lp, position_size, fee_tiers=[...])` implies mutating one pool's fee to see hypothetical outcomes. A V3 pool's fee is baked into its swap math and `feeGrowthGlobal` accumulators at construction — you can't reparameterize a deployed pool. The shipped primitive takes a list of `FeeTierCandidate` input dataclasses, each holding a real V3 pool at its actual fee tier, and compares them. This matches how fee-tier decisions actually look on-chain ("which of these three ETH/USDC pools should I enter?") and mirrors AggregatePortfolio's list-of-inputs pattern.
+
+**No forward fee-income projection.** The spec's `fee_income_estimate` and `net_return` were dropped. Both require a forward volume model the pool object can't provide — no per-block-volume, no historical trajectory, no external price oracle. Rather than guess, v1 reports `observed_fee_yield`: cumulative fees earned to date, in token0 numeraire, divided by current TVL. A rate, not a forecast. Callers who know the pool's age annualize themselves; callers who want forward projection compose with their own volume assumptions.
+
+**No single `optimal_tier` verdict.** Different axes (observed yield, TVL, range status) favor different tiers, and which axis matters depends entirely on the caller's use case — a yield-chaser, a depth-seeker, and an LP worried about out-of-range exposure would each pick differently from the same three pools. v1 returns two independent orderings (`ranking_by_observed_fee_yield`, `ranking_by_tvl`) and per-tier metrics; the caller picks. Consistent with the signal-surfacer-not-verdict-generator convention from DetectRugSignals, AggregatePortfolio, AssessDepegRisk, and DetectFeeAnomaly.
+
+**V3-only with V2 rejection.** V2 has a single hard-coded fee (30 bps via 997/1000) — there are no tiers to compare. V2 inputs raise ValueError with an index-identifying message pointing to the offending candidate. Same graceful-degradation stance as DetectFeeAnomaly (V2-only by necessity; V3 raises) and AssessDepegRisk (stableswap-only; V2/V3 raise).
+
+**Common-pair rejection.** All candidates must share both `token0` and `token1` symbols. Comparing fee tiers of different pairs collapses independent questions into a spurious ranking; v1 errors early with `ValueError` and directs the caller to group by pair. Same stance as AggregatePortfolio's common-token0 rejection.
+
+**Pure composition over CheckPoolHealth and CheckTickRangeStatus.** No new math — the primitive reads per-pool TVL and fees from CheckPoolHealth, range status from CheckTickRangeStatus, and fee tier from `lp.fee // 100`. Yield computation is a single expression: `(total_fee0 + total_fee1 / spot_price) / tvl_in_token0`, with `None` when any input is ill-defined (no fees, no spot price, or no TVL). Demonstrates the breadth-chain composition pattern established by AggregatePortfolio.
+
+**Notes as informational, not warnings.** The `notes: list[str]` field surfaces conditions that affect interpretation of the rankings ("candidate X has no accumulated fees— observed_fee_yield is None", "candidate Y is out of range at current price") but doesn't duplicate information directly visible on the per-tier metrics. Right boundary for a breadth-chain composition: notes alert, metrics inform, rankings order.
+
+**Correction to an earlier convention.** During test development, the test that drives a swap through one V3 pool and asserts its yield ranks ahead of a quiet pool passed on the first run. That disproved an earlier PROJECT_CONTEXT claim that V3 `collected_fee*` updates lazily — they update synchronously in the swap path. The Key Internal Conventions were amended accordingly. Future primitives needing point-in-time fee totals work on both V2 and V3; only per-swap history and rolling rates remain V2-only.
+
+See `python/prod/primitives/comparison/CompareFeeTiers.py` for the implementation and its fuller docstring. See `FeeTierCandidate`, `FeeTierMetrics`, `FeeTierComparison` in `utils/data/` for the shipped dataclass shapes.
 
 ---
 
@@ -962,7 +986,7 @@ python/prod/
 | **Section 1 questions** | 38 |
 | **Question categories** | 9 |
 | **Section 2 primitives** | 19 |
-| **Primitives shipped (1.2.0 working)** | 10 |
+| **Primitives shipped (1.2.0 working)** | 11 |
 | **Primitive sub-packages** | 8 |
 | **New derivations required** | 4 (FindBreakEvenPrice, FindBreakEvenTime, max slippage inversion, tick traversal) |
 | **New derivations completed** | 2 (FindBreakEvenPrice, AssessDepegRisk stableswap-invariant expansion) |
