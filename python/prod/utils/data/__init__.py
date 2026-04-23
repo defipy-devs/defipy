@@ -14,3 +14,4 @@ from .DepegRiskAssessment import DepegRiskAssessment, DepegScenario
 from .FeeAnomalyResult import FeeAnomalyResult
 from .FeeTierCandidate import FeeTierCandidate
 from .FeeTierComparison import FeeTierMetrics, FeeTierComparison
+from .DepositSplitResult import DepositSplitResult

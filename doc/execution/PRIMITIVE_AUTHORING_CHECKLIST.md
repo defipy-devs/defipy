@@ -460,3 +460,4 @@ sustainable.
 | AssessDepegRisk | risk/ | 22 | 2026-04-22 |
 | DetectFeeAnomaly | pool_health/ | 20 | 2026-04-22 |
 | CompareFeeTiers | comparison/ | 21 | 2026-04-23 |
+| OptimalDepositSplit | optimization/ | 19 | 2026-04-23 |

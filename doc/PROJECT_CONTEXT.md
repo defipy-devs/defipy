@@ -26,7 +26,7 @@ As of 1.2.0, the go-forward architecture centers on composable **primitives** �
 
 Each primitive follows the DeFiPy contract: stateless construction, computation at `.apply()`, structured dataclass return.
 
-**Eleven primitives shipped as of the 1.2.0 working branch:**
+**Twelve primitives shipped as of the 1.2.0 working branch:**
 
 | Primitive | Category | Answers | Tests |
 |---|---|---|---|
@@ -41,8 +41,9 @@ Each primitive follows the DeFiPy contract: stateless construction, computation 
 | `AssessDepegRisk` | risk/ | Q2.3 (stableswap depeg scenarios, N=2) | 22 |
 | `DetectFeeAnomaly` | pool_health/ | Q7.3 (invariant-vs-contract fee consistency, V2) | 20 |
 | `CompareFeeTiers` | comparison/ | Q4.3 (V3 fee-tier comparison, N candidates) | 21 |
+| `OptimalDepositSplit` | optimization/ | Q3.3 (V2 zap-in optimal swap fraction, non-mutating) | 19 |
 
-Full suite: **246 tests passing** (primitives + fixture smoke tests). The full 19-primitive inventory and LP-question mapping lives in `doc/execution/DEFIMIND_TIER1_QUESTIONS.md`. Authoring conventions (file layout, style, test coverage, `__init__.py` wiring) are in `doc/execution/PRIMITIVE_AUTHORING_CHECKLIST.md`.
+Full suite: **269 tests passing** (primitives + fixture smoke tests). The full 19-primitive inventory and LP-question mapping lives in `doc/execution/DEFIMIND_TIER1_QUESTIONS.md`. Authoring conventions (file layout, style, test coverage, `__init__.py` wiring) are in `doc/execution/PRIMITIVE_AUTHORING_CHECKLIST.md`.
 
 ### Legacy Agents (frozen for book chapter 9)
 
@@ -83,6 +84,10 @@ These are not obvious from reading any single file. They surfaced during primiti
 - **V2 has per-swap fee history (`fee0_arr`, `fee1_arr`); V3 does not.** V3 accumulates `feeGrowthGlobal0X128` / `feeGrowthGlobal1X128` and derives `collected_fee*` via `_update_fees()`. Primitives that rely on swap *history* (e.g., `CheckPoolHealth.fee_accrual_rate_recent`, `DetectRugSignals.inactive_with_liquidity`) return `None` / `False` for V3 and document why.
 
 - **V3 `collected_fee0` / `collected_fee1` update synchronously during `Swap().apply()`.** Correcting an earlier misreading: V3's fee-growth accumulators get converted to `collected_fee0/1` as part of the swap path, not lazily on a later trigger. `CheckPoolHealth.total_fee0 / total_fee1` show the updated values immediately. This was verified during CompareFeeTiers test authoring — a single swap on a V3 pool populates `collected_fee0` visible through `CheckPoolHealth`. What V3 does *not* have is per-swap history (no `fee0_arr`), only the running accumulator — so rate/window metrics remain V2-only, but point-in-time totals are available on both protocols.
+
+- **V2 zap-in α does NOT grow with deposit size. It shrinks.** The closed-form V2 zap-in quadratic yields α → 1/(1+f) ≈ 0.50075 in the limit of zero deposit (f = 0.997 is the fee multiplier) and dα/d(dx) < 0 identically for dx > 0. Intuition: a larger swap moves the price more, so each unit swapped buys LESS of the opposing token, so you need to swap LESS. The 30-bps fee is the only thing that puts the limiting value slightly above 0.5; the direction of movement with size is *downward*. Verified empirically (α = 0.4779 at 200/1000 = 20% of reserves) and via implicit differentiation. OptimalDepositSplit's docstring and tests now enforce the correct direction; an earlier iteration of the tests asserted `α > 0.5` at size and failed, which prompted the full derivation. Keep in mind for any primitive that reasons about V2 zap-in mechanics.
+
+- **Non-mutating primitives that compose over process-layer math.** OptimalDepositSplit calls `SwapDeposit()._calc_univ2_deposit_portion(...)` — a leading-underscore method on the mutating `SwapDeposit` process object — purely as a read. The helper itself doesn't mutate the pool (it only reads reserves and solves the quadratic); the mutation happens in `SwapDeposit.apply`, which is a separate entry point. This pattern is clean when the math helper is factored out, less clean when it isn't. If a future uniswappy refactor reshapes the private method, OptimalDepositSplit breaks — worth asking uniswappy to promote `_calc_univ2_deposit_portion` to a public `calc_univ2_deposit_portion` at some point, but not blocking for v1. Same pattern would apply for any future primitive wanting to project what a process-layer apply() would do without executing it.
 
 - **V2 `liquidity_providers` has a `"0"` sentinel** for the `MINIMUM_LIQUIDITY` burn at first mint. Exclude it from LP counting and concentration metrics.
 
@@ -130,7 +135,7 @@ pytest python/test/primitives/ -v
 ./resources/run_clean_test_suite.sh --with-defipy
 ```
 
-**Working-branch state: 246 tests passing.**
+**Working-branch state: 269 tests passing.**
 
 ## Usage Patterns
 
@@ -149,6 +154,7 @@ from defipy import (
     DetectFeeAnomaly,
     CompareFeeTiers,
     FeeTierCandidate,
+    OptimalDepositSplit,
 )
 
 # Position analysis
@@ -240,41 +246,51 @@ comparison = CompareFeeTiers().apply([
 #   in_range, range_width_pct
 # Reports observed yield (cumulative fees / TVL), not a forecast —
 # callers who know pool age annualize themselves.
+
+# V2 zap-in optimal split (non-mutating projection of SwapDeposit)
+split = OptimalDepositSplit().apply(v2_lp, eth_token, amount_in = 50.0)
+# → DepositSplitResult(token_in_name, amount_in, optimal_fraction,
+#                      swap_amount_in, swap_amount_out,
+#                      deposit_amount_in, deposit_amount_out,
+#                      expected_lp_tokens, slippage_cost, slippage_pct)
+# α = optimal_fraction is the exact swap fraction that leaves zero
+# dust post-deposit. Pure read — does NOT mutate the pool. Pair with
+# SwapDeposit().apply() to execute; projected expected_lp_tokens
+# matches what SwapDeposit actually mints within ~0.1%.
 ```
 
 ## Next Phase
 
 ### Recommended opener for next session
 
-1. Verify 1.2.0 working-branch state: `pytest python/test/primitives/ -v` should show 246 passing.
-2. Pick primitive #12 from the candidate list below.
+1. Verify 1.2.0 working-branch state: `pytest python/test/primitives/ -v` should show 269 passing.
+2. Pick primitive #13 from the candidate list below.
 
-### Primitive #12 candidates, with reasoning
+### Primitive #13 candidates, with reasoning
 
-**Strongest lean: `OptimalDepositSplit` V2-only** (P2, optimization/).
-- V2 has a clean closed form (the Uniswap V2 zap-in quadratic); ships a new category (optimization/) and new primitive shape (returns optimal parameters rather than metrics)
-- V3 is the open question — either raise cleanly with a helpful message, or tick-walk the harder math. V2-only with V3-rejection is a defensible v1 scope following the CalculateSlippage and DetectFeeAnomaly precedents
-- Shortens the road to the full `EvaluateRebalance` when it eventually ships
-- Estimated ~45 min V2-only
+**Strongest lean: `EvaluateRebalance`** (P2, optimization/).
+- Now that OptimalDepositSplit is shipped, EvaluateRebalance has its full dependency chain. Depth + breadth chain: depth over AnalyzePosition + FindBreakEvenPrice + OptimalDepositSplit + CalculateSlippage for the current vs. hypothetical new position; breadth to rank multiple candidate new positions if supplied.
+- Biggest-value LP question in the library: "should I rebalance now or wait?" combines cost side (withdrawal slippage + swap fees + IL crystallization) with benefit side (better positioning + improved fee capture). Chains more primitives than any shipped primitive to date.
+- Estimated ~90 min given the composition surface.
+- Design needs up-front settling: does it take one candidate new position or N candidates? Does it make a rebalance/hold recommendation (verdict territory — needs careful field naming) or just expose the net-benefit metrics?
 
 **Second choice: `FindBreakEvenTime`** (P5, position/).
-- Symbolic pair with FindBreakEvenPrice — "how long until fees compensate IL" complements "at what price does IL exceed fees." Both are position/ primitives.
-- Needs a fee-rate estimation choice (per-block, per-day, trailing-window). Small design conversation up front.
-- Estimated ~45 min
+- Symbolic pair with FindBreakEvenPrice. Pure position-level math. Needs a small fee-rate design conversation up front — per-block, per-day, trailing-window, or caller-supplied.
+- Clean scope, V2+V3 both doable.
+- Estimated ~45 min.
 
 **Third choice: `EvaluateTickRanges`** (P2, optimization/).
-- First primitive to iterate over candidate tick ranges and score each one. Opens optimization/ category if not already opened by OptimalDepositSplit.
-- V3-only by definition. No V2 degradation path needed.
-- Estimated ~60 min; touches UniV3Helper and TickMath.
+- V3-only. Iterates over candidate tick ranges and scores each on capital efficiency + IL exposure + fee capture.
+- optimization/ category already opened by OptimalDepositSplit, so no new-category overhead.
+- Estimated ~60 min; touches UniV3Helper (already read) and TickMath.
 
-**Deferred: `EvaluateRebalance` full**, `AssessLiquidityDepth`, `CompareProtocols`.
-- `EvaluateRebalance` full needs `WithdrawSwap` / `SwapDeposit` / `OptimalDepositSplit` as dependencies — OptimalDepositSplit would unlock this
-- `AssessLiquidityDepth` needs V3 tick-walking that doesn't exist in the codebase yet; deserves a dedicated session
-- `CompareProtocols` wants a cross-protocol multi-pool fixture beyond what's in conftest; CompareFeeTiers showed the inline-helper pattern (`_build_v3_pool_at_fee`) scales fine for up to 4 pools, so a shared fixture isn't urgent yet
+**Deferred: `AssessLiquidityDepth`, `CompareProtocols`.**
+- `AssessLiquidityDepth` needs V3 tick-walking that doesn't exist in the codebase yet; deserves a dedicated session. Also blocks the V3 extension of DetectFeeAnomaly via the UniV3Helper.quote fix.
+- `CompareProtocols` wants a cross-protocol multi-pool fixture; the inline-helper pattern (`_build_v3_pool_at_fee` from CompareFeeTiers, `_build_v2_pool` from OptimalDepositSplit tests) is scaling fine, so a shared fixture isn't urgent yet but CompareProtocols is the right moment to revisit the decision.
 
 **Full remaining inventory by priority:**
 - **P1 remaining**: `AssessLiquidityDepth`
-- **P2 — Optimization**: `OptimalDepositSplit`, `EvaluateRebalance`, `EvaluateTickRanges`
+- **P2 — Optimization**: `EvaluateRebalance`, `EvaluateTickRanges`
 - **P3 — Comparison**: `CompareProtocols`
 - **P5 — Advanced**: `FindBreakEvenTime`, `DetectMEV`, `DiscoverPools`
 
@@ -292,6 +308,7 @@ Full LP-question mapping and signatures for all 19 primitives live in `doc/execu
 8. **Three rounds, then rethink.** If a primitive's implementation has required three or more rounds of local fixes against failing tests, stop adding fixes and reconsider the *approach*, not the patch. Session 2026-04-22's AssessDepegRisk initial iterative-solver approach accumulated a modeling error, a unit-conversion error, a reachability assumption violation, and was about to accumulate a fourth before the pivot to the analytical approach resolved everything cleanly. When at round 3, ask: "is this approach compatible with what my dependency was designed for?" If no, propose an alternative explicitly and get user sign-off before reimplementing. Codified as §9 of PRIMITIVE_AUTHORING_CHECKLIST.md.
 9. **Invariant-math vs state-threading: pick deliberately.** For counterfactual questions at the edges of a protocol library's operating envelope (extreme depegs, far out-of-range price moves, drained pools), evaluating the invariant directly in floats is usually cleaner than driving the library's state solvers to the counterfactual target. For forward trajectories (swap + deposit + withdrawal sequences, fee accumulation over time), state threading through the protocol library is correct. AssessDepegRisk and DetectFeeAnomaly are the two invariant-math primitives shipped so far; the pattern is codified as §10 of PRIMITIVE_AUTHORING_CHECKLIST.md.
 10. **When dependency tooling reveals a limitation, scope narrower; don't invent workarounds.** Session 2026-04-22's DetectFeeAnomaly discovered that `UniV3Helper.quote` hard-codes 30 bps rather than reading `lp.fee`. Rather than invent a synthetic V3 path, v1 shipped V2-only and the UniV3Helper issue went to the backlog. Future primitives hitting similar dependency-layer issues should follow suit: document the issue, track in backlog, scope the primitive honestly, ship.
+11. **Direction-of-change assertions deserve a derivation, not a prior.** Session 2026-04-23's OptimalDepositSplit shipped with tests asserting `α > 0.5` for large V2 zap deposits — based on an intuition ("swap moves price so you swap more to match what's left") that sounded right but was wrong. The actual math has dα/d(dx) < 0 identically: α starts at 1/(1+f) ≈ 0.50075 in the zero-deposit limit and DECREASES with deposit size. The failed tests forced the derivation. The generalizable rule: when a test assertion encodes a direction of change or a monotonicity claim, work out the sign from the closed form BEFORE writing the assertion. Better yet, write the monotonicity claim as a sequential test across increasing inputs — that's a stronger assertion than any single-threshold check, and it tells you immediately when your sign intuition is backwards. Applies especially to primitives reasoning about AMM mechanics where "this moves the price" is often less directly related to caller-observable behavior than it feels.
 
 ### Later: LLM Reasoning Layer (DeFiMind)
 
@@ -309,7 +326,8 @@ python/prod/
 │   ├── risk/                # CheckTickRangeStatus, AssessDepegRisk
 │   ├── pool_health/         # CheckPoolHealth, DetectRugSignals, DetectFeeAnomaly
 │   ├── portfolio/           # AggregatePortfolio
-│   └── comparison/          # CompareFeeTiers
+│   ├── comparison/          # CompareFeeTiers
+│   └── optimization/        # OptimalDepositSplit
 ├── agents/                  # Legacy — frozen for book chapter 9
 ├── cpt/quote/               # Core pricing/liquidity (re-exports from uniswappy)
 ├── cpt/index/               # Mathematical inverse relationships
@@ -321,7 +339,8 @@ python/prod/
                                PortfolioAnalysis (+ nested PositionSummary),
                                DepegRiskAssessment (+ nested DepegScenario),
                                FeeAnomalyResult, FeeTierCandidate,
-                               FeeTierComparison (+ nested FeeTierMetrics)
+                               FeeTierComparison (+ nested FeeTierMetrics),
+                               DepositSplitResult
 
 doc/
 ├── PROJECT_CONTEXT.md                              # This file
@@ -433,6 +452,24 @@ Single-primitive session. Opened new `comparison/` category, shipped the first V
 - **State at close**: 246 tests passing. All three doc files updated. CompareFeeTiers moves from P3 remaining to shipped; P3 now holds only CompareProtocols.
 
 Next session should pick primitive #12 from the candidates above. `OptimalDepositSplit` (V2-only) remains the strongest lean — opens optimization/, uses a known closed form, unblocks EvaluateRebalance downstream.
+
+### Session 2026-04-23 (part 2): primitive #12 (OptimalDepositSplit)
+
+Second primitive of the day. Shipped the V2 zap-in optimizer as a non-mutating projection of SwapDeposit, and closed a small intuition bug by forcing a derivation.
+
+**Primitive #12 — OptimalDepositSplit** (optimization/, 19 tests). Non-mutating V2 primitive. Given `amount_in` tokens of a single side, returns the optimal swap fraction α such that post-swap reserves match the (1-α)·amount_in remainder, leaving zero deposit dust. Pure read — projects what `SwapDeposit().apply()` would do without executing it. New dataclass: `DepositSplitResult` (10 fields covering split, balances, expected LP tokens, and swap-leg slippage). Opens the `optimization/` category.
+
+- **Mode B read before design.** Reading `SwapDeposit._calc_univ2_deposit_portion` confirmed the quadratic is factored out and read-only; it just solves for α given pool state. That made OptimalDepositSplit a pure composition primitive — the V2 zap-in math is inherited intact via a single helper call, and the rest is surrounding bookkeeping (spot price, post-swap reserves, LP-token mint formula, slippage denomination).
+- **Private-method import, tracked risk.** OptimalDepositSplit calls `SwapDeposit()._calc_univ2_deposit_portion(...)` — leading-underscore convention but not actually name-mangled. Works today; a future uniswappy refactor could break it. Not blocking. The sibling Key Internal Conventions entry now documents the pattern and suggests a future uniswappy API promotion (`_calc_univ2_deposit_portion` → `calc_univ2_deposit_portion`).
+- **The direction-of-α bug I shipped in my own head.** Initial test assertions expected α > 0.5 for large deposits ("swap moves price, so you need to swap more to match what's left"). Two tests failed on first run — α = 0.4779 at 200/1000 reserves, not above 0.5. I stopped and worked out the V2 zap-in quadratic from scratch: f·α²·dx + r·α·(1+f) − r = 0 with f = 0.997. Taking the dx→0 limit via L'Hôpital gives α → 1/(1+f) ≈ 0.50075 (slight upward bias from fee asymmetry). Implicit differentiation gives dα/d(dx) = −α²f / [2αf·dx + r(1+f)] < 0 identically. So α starts just above 0.5, decreases monotonically with size. Correct intuition: a larger swap moves the price more, so each unit swapped buys LESS, so you need to swap LESS. This was a textbook case of heuristic #5 ("step through threshold edge cases before writing the comparator") extended to direction-of-change assertions. The failure did its job: forced the derivation, which is now captured both in the docstring and as a new Key Internal Conventions entry so the mistake is caught if any future primitive (especially EvaluateRebalance, which depends on OptimalDepositSplit) repeats the bad intuition.
+- **Test plan added a direct monotonicity check in response.** The fix was more than flipping an inequality: I added `test_alpha_monotone_decreasing_in_amount_in` that checks α is strictly decreasing across [0.1, 10, 50, 200]. That's a much stronger assertion than picking a single threshold and asserting which side of it α sits — it directly tests the dα/d(dx) < 0 property. Future primitives reasoning about V2 mechanics should prefer this shape of test over single-threshold assertions.
+- **Consistency cross-check worked.** The critical test builds two identical pools, calls OptimalDepositSplit on one and SwapDeposit on the other, and verifies the projected `expected_lp_tokens` matches the actual LP minting within 0.1%. Passed on the first run at the set tolerance. The projection primitive really does describe what the execution primitive will do, which is the whole point of a non-mutating-projection shape.
+- **Estimated 45 min, actual ~60 min** including the derivation pause. The derivation-on-failure loop is a net win — the original time estimate assumed intuition was right; when it wasn't, 15 minutes of paper-math recovery is cheaper than shipping a primitive whose docstring lies about its own behavior.
+- **19 tests across 7 classes** (Shape, Small-deposit, Large-deposit, Monotonicity, LP tokens, Consistency, Symmetry, Validation). One of the Consistency tests asserts non-mutation explicitly — checks that lp.reserve0, lp.reserve1, lp.total_supply, and lp.liquidity_providers[USER] are all unchanged after `.apply()`. Pattern worth continuing for any future projection primitive.
+
+- **State at close**: 269 tests passing. All three doc files updated with #12 ship, new conventions entries (V2 zap-in α direction; non-mutating primitives over process-layer helpers), and updated next-session candidates.
+
+Next session should pick primitive #13. `EvaluateRebalance` is now unlocked — OptimalDepositSplit was its last hard dependency — and is the biggest-value remaining primitive. Design conversation needed up front: single candidate vs. N candidates, verdict field vs. metrics-only.
 
 ## MCP Setup (for Claude.ai sessions)
 

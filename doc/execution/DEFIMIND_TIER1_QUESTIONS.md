@@ -492,11 +492,13 @@ class TickRangeEvaluation:
 
 **Answers:** Q3.3, Q9.5
 
-**Constructor:** `OptimalDepositSplit()`
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, V2-only). See v1 Implementation Notes below.
 
-**Signature:** `.apply(lp, token_in, amount_in, lwr_tick=None, upr_tick=None) → DepositSplitResult`
+**Constructor (spec):** `OptimalDepositSplit()`
 
-**Returns:**
+**Signature (spec):** `.apply(lp, token_in, amount_in, lwr_tick=None, upr_tick=None) → DepositSplitResult`
+
+**Returns (spec):**
 ```python
 @dataclass
 class DepositSplitResult:
@@ -509,6 +511,28 @@ class DepositSplitResult:
 ```
 
 **Internal calls:** `SwapDeposit._calc_univ2_deposit_portion()` / `_calc_univ3_deposit_portion()`
+
+#### v1 Implementation Notes (2026-04-23)
+
+v1 diverges from the spec on field names (token_in/token_out rather than token_0/token_1) and on scope (V2-only), but preserves the primitive's core contract: non-mutating projection of what the mutating `SwapDeposit().apply()` would do.
+
+**V2-only, with V3 rejection.** V2's zap-in quadratic has a clean closed form already factored into `SwapDeposit._calc_univ2_deposit_portion` and pure-read. V3's portion calculation uses `scipy.optimize.minimize` internally and depends on `UniV3Helper.quote` which the cleanup backlog flags for its hard-coded-997 fee bug. Rather than propagate that latent issue into a projection primitive, v1 raises `ValueError` on V3 with a backlog-referencing message. Extension to V3 becomes clean once the UniV3Helper fix lands.
+
+**Field-naming divergence from spec.** The spec uses `deposit_amount_0` / `deposit_amount_1` (token0/token1 axis). v1 uses `deposit_amount_in` / `deposit_amount_out` (the input-vs-output axis from the caller's perspective). The motivation: a caller who passes `token_in = token1` doesn't want to reason about which of deposit_amount_0 and deposit_amount_1 matches their input. Pair-with-swap fields is the natural shape — `swap_amount_in` / `swap_amount_out` / `deposit_amount_in` / `deposit_amount_out` all share the same subject. The `lwr_tick` / `upr_tick` parameters from the spec are also omitted, since those are V3-only and v1 is V2-only.
+
+**Non-mutating, by design and by assertion.** The shipped primitive projects what `SwapDeposit().apply(...)` would do *without* touching the pool. `SwapDeposit` mutates (swaps, mints LP tokens, changes reserves); OptimalDepositSplit reads only. The test suite asserts this explicitly — a dedicated test verifies that after `OptimalDepositSplit().apply(...)` returns, lp.reserve0, lp.reserve1, lp.total_supply, and lp.liquidity_providers[USER] are unchanged. Pattern applicable to any future projection primitive.
+
+**Consistency cross-check against SwapDeposit.** The most important test builds two identical pools, runs OptimalDepositSplit on one and SwapDeposit on the other, and verifies the projected `expected_lp_tokens` matches the actual LP balance change within 0.1%. This closes the loop on the primitive's core promise — "I'll tell you what SwapDeposit would do" — by directly comparing the prediction to the execution.
+
+**Added fields not in the spec.** `token_in_name` (echoed for traceability), `amount_in` (echoed), `swap_amount_out`, `deposit_amount_out`, and `slippage_pct`. The additions support the signal-surfacer convention (expose numbers, not verdicts) and make the dataclass self-describing enough that an LLM operator can summarize it without needing the primitive's docstring on hand.
+
+**Slippage denomination.** `slippage_cost` is expressed in token_out units — (α · amount_in · spot_price) minus swap_amount_out, where spot_price is pre-swap. This matches `CalculateSlippage.slippage_cost`'s convention, so the two primitives compose cleanly. `slippage_pct` is `slippage_cost / (α · amount_in · spot_price)`, always in [0, 1). For tiny deposits slippage_pct ≈ 0.003 (the 30-bps fee itself); for a 20%-of-reserves deposit it grows to several percent.
+
+**Correct α behavior, documented after the test suite caught an intuition error.** Working the V2 zap quadratic through carefully: α → 1/(1+f) ≈ 0.50075 as dx → 0 (f = 0.997 is the fee multiplier), and dα/d(dx) < 0 identically for dx > 0. So α starts just above 0.5 and *decreases* with deposit size — not increases. Initial tests asserted the wrong direction and failed on first run; the derivation was done on paper in response and is now captured in the primitive's docstring, in PROJECT_CONTEXT's Key Internal Conventions, and in decision heuristic #11 ("direction-of-change assertions deserve a derivation, not a prior"). This is a trap any future primitive reasoning about V2 mechanics could walk into — EvaluateRebalance especially, since it depends on OptimalDepositSplit.
+
+**Private-method dependency as a tracked risk.** OptimalDepositSplit calls `SwapDeposit()._calc_univ2_deposit_portion(...)` — a leading-underscore method on the mutating process object. The call is read-only and works, but a future uniswappy refactor could reshape the private method and break OptimalDepositSplit silently. Not blocking; tracked as a future API-promotion request on uniswappy.
+
+See `python/prod/primitives/optimization/OptimalDepositSplit.py` for the implementation and `python/prod/utils/data/DepositSplitResult.py` for the shipped dataclass shape.
 
 ---
 
@@ -986,7 +1010,7 @@ python/prod/
 | **Section 1 questions** | 38 |
 | **Question categories** | 9 |
 | **Section 2 primitives** | 19 |
-| **Primitives shipped (1.2.0 working)** | 11 |
+| **Primitives shipped (1.2.0 working)** | 12 |
 | **Primitive sub-packages** | 8 |
 | **New derivations required** | 4 (FindBreakEvenPrice, FindBreakEvenTime, max slippage inversion, tick traversal) |
 | **New derivations completed** | 2 (FindBreakEvenPrice, AssessDepegRisk stableswap-invariant expansion) |
