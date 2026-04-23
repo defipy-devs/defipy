@@ -628,5 +628,7 @@ When writing the next cross-protocol sibling set (likely
 | AnalyzeBalancerPosition | position/ | 22 | 2026-04-23 |
 | AnalyzeStableswapPosition | position/ | 21 | 2026-04-23 |
 | AggregatePortfolio (cross-protocol extension) | portfolio/ | +13 | 2026-04-23 |
+| SimulateBalancerPriceMove | position/ | 22 | 2026-04-23 |
+| SimulateStableswapPriceMove | position/ | 19 | 2026-04-23 |
 
-**Test totals:** 459 passing across all primitives + fixture smoke tests.
+**Test totals:** 504 passing across all primitives + fixture smoke tests.

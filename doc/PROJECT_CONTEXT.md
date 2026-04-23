@@ -26,7 +26,7 @@ As of 1.2.0, the go-forward architecture centers on composable **primitives** �
 
 Each primitive follows the DeFiPy contract: stateless construction, computation at `.apply()`, structured dataclass return.
 
-**Twenty primitives shipped as of the 1.2.0 working branch** — 17 from the original Tier 1 spec, plus 3 cross-protocol position analyzers (sibling primitives to AnalyzePosition for Balancer and Stableswap). AggregatePortfolio has been upgraded to cross-protocol dispatch.
+**Twenty-two primitives shipped as of the 1.2.0 working branch** — 17 from the original Tier 1 spec, plus 5 cross-protocol siblings (AnalyzePosition + SimulatePriceMove extensions for Balancer and Stableswap). AggregatePortfolio has been upgraded to cross-protocol dispatch.
 
 | Primitive | Category | Answers | Tests |
 |---|---|---|---|
@@ -34,6 +34,8 @@ Each primitive follows the DeFiPy contract: stateless construction, computation 
 | `AnalyzeBalancerPosition` | position/ | Q1.1–Q1.4 on Balancer weighted pools, 2-asset | 22 |
 | `AnalyzeStableswapPosition` | position/ | Q1.1–Q1.4 on Stableswap, 2-asset, with unreachable-alpha handling | 21 |
 | `SimulatePriceMove` | position/ | Q2.1, Q5.1, Q5.2 (V2/V3 price-move scenarios) | 21 |
+| `SimulateBalancerPriceMove` | position/ | Q2.1, Q5.1, Q5.2 on Balancer weighted pools, 2-asset | 22 |
+| `SimulateStableswapPriceMove` | position/ | Q2.1, Q5.1, Q5.2 on Stableswap, 2-asset, with unreachable-alpha handling | 19 |
 | `CalculateSlippage` | execution/ | Q8.1, Q8.2, Q9.2 (V2/V3 trade slippage + max-size) | 20 |
 | `DetectMEV` | execution/ | Q8.5 (theoretical-vs-actual output comparison) | 20 |
 | `CheckTickRangeStatus` | risk/ | Q2.4 (V3 range proximity) | 16 |
@@ -55,9 +57,9 @@ Each primitive follows the DeFiPy contract: stateless construction, computation 
 - `balancerpy.analytics.risk.BalancerImpLoss` — weighted-pool IL math, 2-asset, lifted during 1.2.0
 - `stableswappy.analytics.risk.StableswapImpLoss` — stableswap IL math, 2-asset, with unreachable-alpha semantics
 
-Full suite: **459 tests passing** (primitives + fixture smoke tests). The full 19-primitive inventory, LP-question mapping, and per-primitive v1 implementation notes live in `doc/execution/DEFIMIND_TIER1_QUESTIONS.md`. Authoring conventions (file layout, style, test coverage, `__init__.py` wiring, cross-protocol extension pattern) are in `doc/execution/PRIMITIVE_AUTHORING_CHECKLIST.md`.
+Full suite: **504 tests passing** (primitives + fixture smoke tests). The full 19-primitive inventory, LP-question mapping, and per-primitive v1 implementation notes live in `doc/execution/DEFIMIND_TIER1_QUESTIONS.md`. Authoring conventions (file layout, style, test coverage, `__init__.py` wiring, cross-protocol extension pattern) are in `doc/execution/PRIMITIVE_AUTHORING_CHECKLIST.md`.
 
-Tier 1 scorecard: 17/19 from the original spec shipped. Remaining: `AssessLiquidityDepth` (V3 tick-walking, biggest unshipped piece) and `DiscoverPools` (web3scout-dependent, stretch goal).  Plus the three cross-protocol position analyzers beyond the 19-primitive spec.
+Tier 1 scorecard: 17/19 from the original spec shipped. Remaining: `AssessLiquidityDepth` (V3 tick-walking, biggest unshipped piece) and `DiscoverPools` (web3scout-dependent, stretch goal). Plus five cross-protocol siblings beyond the 19-primitive spec: `AnalyzeBalancerPosition`, `AnalyzeStableswapPosition`, `SimulateBalancerPriceMove`, `SimulateStableswapPriceMove`, and AggregatePortfolio's cross-protocol dispatch. "What if price moves X%?" is now answerable on all four AMM families.
 
 ### Legacy Agents (frozen for book chapter 9)
 
@@ -163,7 +165,7 @@ pytest python/test/primitives/ -v
 ./resources/run_clean_test_suite.sh --with-defipy
 ```
 
-**Working-branch state: 459 tests passing.**
+**Working-branch state: 504 tests passing.**
 
 ## Usage Patterns
 
@@ -338,21 +340,20 @@ split = OptimalDepositSplit().apply(v2_lp, eth_token, amount_in = 50.0)
 
 ## Next Phase
 
-Tier 1 is substantially complete — 17 of the original 19 primitives have shipped, plus 3 cross-protocol position analyzers that weren't in the original spec. The remaining work falls into four buckets in descending value/effort order:
+Tier 1 is substantially complete — 17 of the original 19 primitives have shipped, plus 5 cross-protocol siblings that weren't in the original spec. The remaining work falls into four buckets in descending value/effort order:
 
 ### Recommended opener for next session
 
-1. Verify working-branch state: `pytest python/test/primitives/ -v` should show 459 passing.
+1. Verify working-branch state: `pytest python/test/primitives/ -v` should show 504 passing.
 2. Pick a bucket below — the strongest lean depends on immediate goals (infrastructure completeness vs. demonstrable capability).
 
-### Bucket A — Cross-protocol depth: round out Balancer/Stableswap (~half-day to day)
+### Bucket A — Cross-protocol depth: slippage remaining (~half-day)
 
-The three shipped cross-protocol analyzers (`AnalyzePosition` + Balancer/Stableswap siblings) establish the pattern. Two near-term extensions follow the same shape without new math:
+The five shipped cross-protocol siblings (`AnalyzePosition` + `SimulatePriceMove` both extended to Balancer and Stableswap) close the position-diagnostic and price-scenario questions across all four AMM families. One extension remains in this bucket:
 
-- **`SimulateBalancerPriceMove` / `SimulateStableswapPriceMove`** — mirror `SimulatePriceMove`, compose over the Impermanent Loss classes with alpha override. Pure copy-of-pattern, ~30 min each. Unblocks full V2/V3/Balancer/Stableswap parity for the "what if price moved X%" question.
-- **Balancer/Stableswap slippage extension to `CalculateSlippage`** — currently V2/V3-only. Add sibling primitives or extend CalculateSlippage itself to dispatch by protocol. Unlocks full slippage plumbing in `CompareProtocols`.
+- **Balancer/Stableswap slippage extension to `CalculateSlippage`** — currently V2/V3-only. Add sibling primitives (`CalculateBalancerSlippage`, `CalculateStableswapSlippage`) or extend CalculateSlippage itself to dispatch by protocol. Unlocks full slippage plumbing in `CompareProtocols` (where slippage_at_amount currently degrades to None for non-Uniswap candidates).
 
-These are low-risk and move the library toward "every question the 17 primitives answer, answers that question on any of the 4 protocols" which is a real and useful completeness bar.
+With that, every question the 17 original primitives answer is answerable on any of the 4 protocols.
 
 ### Bucket B — Real math: break-even on non-Uniswap protocols (half-day each)
 
@@ -461,8 +462,6 @@ Items that surfaced during 1.2.0 but belong in future releases of the sibling pa
 
 - **Balancer/Stableswap extensions to CalculateSlippage + CompareProtocols.** `CalculateSlippage` is V2/V3-only; `CompareProtocols` accepts Balancer and Stableswap candidates but degrades slippage fields to `None` for those protocols in v1. Sibling slippage primitives (`CalculateBalancerSlippage`, `CalculateStableswapSlippage`) or a protocol-dispatching CalculateSlippage would close this gap. Low-risk, moderate-effort — the math is available in each sibling repo's get_amount_out paths. Unblocks full cross-protocol slippage plumbing in CompareProtocols.
 
-- **SimulatePriceMove sibling primitives for Balancer and Stableswap.** Same pattern as AnalyzeBalancerPosition / AnalyzeStableswapPosition — compose BalancerImpLoss / StableswapImpLoss with an explicit alpha override. No new math required; ~30 min each. Fills out "every Q2.1/Q5.1/Q5.2 question answerable on every protocol" which is a real completeness bar.
-
 - **FindBreakEven sibling primitives for Balancer and Stableswap.** Genuine new math: Balancer's break-even α inverts `α^w + (1-w)·α^(w-1) - 1 = -fee_ratio`; stableswap's inverts via the ε↔δ fixed point. Half-day each, not copy-paste. Tracked as Bucket B in the Next Phase section above.
 
 - **N-asset extension of BalancerImpLoss, StableswapImpLoss, and their AnalyzePosition siblings.** All four are 2-asset in v1 (inherited from the underlying IL classes). N>2 requires different parameterization and reopens derivation work. Non-blocking for common pairs but worth flagging for Balancer weighted baskets and 3Pool-style stableswaps.
@@ -568,6 +567,31 @@ Second primitive of the day. Shipped the V2 zap-in optimizer as a non-mutating p
 - **State at close**: 269 tests passing. All three doc files updated with #12 ship, new conventions entries (V2 zap-in α direction; non-mutating primitives over process-layer helpers), and updated next-session candidates.
 
 Next session should pick primitive #13. `EvaluateRebalance` is now unlocked — OptimalDepositSplit was its last hard dependency — and is the biggest-value remaining primitive. Design conversation needed up front: single candidate vs. N candidates, verdict field vs. metrics-only.
+
+### Session 2026-04-23 (part 4): cross-protocol price-move simulators
+
+Follow-on to part 3. Closed Bucket A's copy-of-pattern item: `SimulateBalancerPriceMove` and `SimulateStableswapPriceMove` shipped together in a single session, bringing price-move projection to all four AMM families.
+
+**Two primitives shipped:**
+
+- **SimulateBalancerPriceMove** (position/, 22 tests). 2-asset weighted-pool price-move projection. Composes `BalancerImpLoss.calc_iloss(alpha, weight=...)`. Opp-token numeraire matching AnalyzeBalancerPosition. Surfaces `base_weight` on the result dataclass for caller interpretability — the same pattern AnalyzeBalancerPosition established. Weight-dependence test (80/20 has smaller |IL| than 50/50 at same shock) passed on first run at -30% shock.
+
+- **SimulateStableswapPriceMove** (position/, 19 tests). 2-asset stableswap price-move projection. Composes `StableswapImpLoss.calc_iloss` with `DepegUnreachableError` catch → Optional None fields on numeric outputs, populated metadata on token_names / A / new_price_ratio. Peg numeraire yields a clean identity: `hold_value_at_new == current_value` because tokens are valued 1:1 regardless of which one moved, so `new_value = current_value · (1 + IL)` directly. Current-alpha derivation via `lp.math_pool.dydx(0, 1, use_fee=False)` — shocks compound onto the existing drift: `new_alpha = current_alpha · (1 + pct)`. At-peg short-circuit via `_AT_PEG_TOL` matching AnalyzeStableswapPosition.
+
+**New dataclasses:** BalancerPriceMoveScenario (8 fields), StableswapPriceMoveScenario (7 fields with 3 Optional for unreachable regime).
+
+**Design decisions held from part 3:**
+- Split dataclasses (not shared with V2/V3 PriceMoveScenario). Stableswap's unreachable regime needs Optional numerics; protocol-specific fields (base_weight, A, token_names) live where they're meaningful.
+- "Simulate from current state, not entry" semantics preserved across all three siblings. Historical-entry framing lives on the Analyze*Position siblings.
+- fee_projection = None across all three — scope consistency.
+
+**Mode B pattern held.** Read the template (V2/V3 SimulatePriceMove), both IL classes (BalancerImpLoss.calc_iloss signature, StableswapImpLoss + DepegUnreachableError), and both sibling analyzers (AnalyzeBalancerPosition, AnalyzeStableswapPosition) before writing. Up-front design conversation settled dataclass-splitting, input shape, alpha convention, and unreachable handling before code. Zero mid-session redesigns, zero test failures. 504 tests passing on first run.
+
+**State at close:** 504 tests passing. 22 primitives shipped (17 Tier 1 + 5 cross-protocol siblings). Docs updated.
+
+Bucket A narrowed to one remaining item: Balancer/Stableswap slippage extension to CalculateSlippage. After that, Tier 1 completeness story is cleanly "every question the 17 primitives answer, answers that question on any of the 4 protocols."
+
+---
 
 ### Session 2026-04-23 (part 3): cross-protocol position analyzers + portfolio dispatch
 

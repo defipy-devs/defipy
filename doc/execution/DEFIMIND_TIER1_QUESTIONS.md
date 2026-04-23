@@ -1048,6 +1048,101 @@ See `python/prod/primitives/position/AnalyzeStableswapPosition.py` for the imple
 
 ---
 
+### Primitive 22: `SimulateBalancerPriceMove`
+
+**Answers:** Q2.1, Q5.1, Q5.2 (on Balancer weighted pools, 2-asset)
+
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, 2-asset Balancer). 22 tests passing.
+
+**Constructor:** `SimulateBalancerPriceMove()`
+
+**Signature:** `.apply(lp, price_change_pct, lp_init_amt) → BalancerPriceMoveScenario`
+
+**Returns:**
+```python
+@dataclass
+class BalancerPriceMoveScenario:
+    base_tkn_name: str
+    opp_tkn_name: str
+    base_weight: float                  # Surfaced for caller interpretability
+    new_price_ratio: float              # alpha = 1 + price_change_pct
+    new_value: float                    # Position value in opp-token units
+    il_at_new_price: float
+    fee_projection: Optional[float]     # Always None in v1
+    value_change_pct: float
+```
+
+**Internal calls:** `balancerpy.analytics.risk.BalancerImpLoss.calc_iloss(alpha, weight=...)`
+
+#### v1 Implementation Notes (2026-04-23)
+
+Sibling to `SimulatePriceMove` for Balancer 2-asset weighted pools. Same "what if price moves X% from here?" framing adapted to the weighted AMM.
+
+**2-asset scope inherited from BalancerImpLoss.** N-asset extension requires extending BalancerImpLoss first.
+
+**Opp-token numeraire matching AnalyzeBalancerPosition.** Differs from AnalyzePosition's token0 numeraire. Base-token price is expressed in opp units; a `price_change_pct = -0.30` means "base token drops 30% in opp units."
+
+**base_weight surfaced on result.** Balancer IL depends on both alpha and weight; surfacing the weight makes the result self-describing for an LLM caller that's reading the dataclass without consulting the pool object.
+
+**Simulate-from-current-state semantics.** Treats the current pool state as the baseline — not a historical entry. For historical-entry framing use AnalyzeBalancerPosition with entry amounts explicit. This matches the V2/V3 sibling's convention.
+
+**fee_projection = None.** Matches the V2/V3 sibling and consistent with AnalyzeBalancerPosition's no-fee-attribution scope.
+
+**Fee-free spot computed directly from reserves and weights** (not `lp.get_price()` which bakes in SWAP_FEE). Matches BalancerImpLoss's internal approach. Documented as a Key Internal Convention.
+
+**Weight-dependence test passed first run.** At 80/20 vs 50/50 under the same shock (-30%), 80/20 has smaller |IL| — the weighted-pool property the primitive is built to expose. This was the highest-risk pre-run assertion; it held without adjustment.
+
+See `python/prod/primitives/position/SimulateBalancerPriceMove.py` for the implementation.
+
+---
+
+### Primitive 23: `SimulateStableswapPriceMove`
+
+**Answers:** Q2.1, Q5.1, Q5.2 (on Curve-style stableswap pools, 2-asset)
+
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, 2-asset Stableswap). 19 tests passing.
+
+**Constructor:** `SimulateStableswapPriceMove()`
+
+**Signature:** `.apply(lp, price_change_pct, lp_init_amt) → StableswapPriceMoveScenario`
+
+**Returns:**
+```python
+@dataclass
+class StableswapPriceMoveScenario:
+    token_names: List[str]              # 2 entries in v1
+    A: int                              # Amplification coefficient
+    new_price_ratio: float              # current_alpha * (1 + price_change_pct)
+    new_value: Optional[float]          # None in unreachable-alpha regime
+    il_at_new_price: Optional[float]    # None in unreachable-alpha regime
+    fee_projection: Optional[float]     # Always None in v1
+    value_change_pct: Optional[float]   # None in unreachable-alpha regime
+```
+
+**Internal calls:** `stableswappy.analytics.risk.StableswapImpLoss.calc_iloss`, `lp.math_pool.dydx(0, 1, use_fee=False)`
+
+#### v1 Implementation Notes (2026-04-23)
+
+Sibling to `SimulatePriceMove` for Stableswap 2-asset pools. Clean hold-value identity because of the peg numeraire.
+
+**2-asset scope inherited from StableswapImpLoss.**
+
+**Peg numeraire yields a clean identity.** Because stableswap values tokens 1:1 regardless of which one moved, `hold_value_at_new == current_value` — the hold counterfactual is simulation-invariant. This simplifies the new_value computation to `current_value * (1 + IL)` directly, without needing to re-price the composition at a new spot. Notable contrast with V2/V3 and Balancer where hold_value shifts with price.
+
+**Current-alpha derivation via dydx.** `lp.math_pool.dydx(0, 1, use_fee=False)` gives the current alpha; shocks compound onto existing drift: `new_alpha = current_alpha * (1 + pct)`. Lets the caller probe "how bad could this get" from the pool's current state without first assuming it's balanced.
+
+**At-peg short-circuit via `_AT_PEG_TOL = 1e-12`** matching AnalyzeStableswapPosition. When the simulated alpha is essentially 1.0, return zero IL directly — avoids running the fixed-point solver on an identity case and avoids the degenerate epsilon=0 condition.
+
+**DepegUnreachableError caught → Optional None fields** on numeric outputs (new_value, il_at_new_price, value_change_pct), with populated metadata (token_names, A, new_price_ratio). Same convention as AssessDepegRisk, AnalyzeStableswapPosition, CompareProtocols. At A=200, even a 2% shock triggers the unreachable path.
+
+**fee_projection = None** matching the other SimulatePriceMove siblings.
+
+**Symmetric IL around peg.** Positive and negative shocks of the same magnitude produce the same IL magnitude, matching StableswapImpLoss's derivation. Tested explicitly.
+
+See `python/prod/primitives/position/SimulateStableswapPriceMove.py` for the implementation.
+
+---
+
 ## Question → Primitive Mapping
 
 | Question | Primitives Used |
@@ -1056,7 +1151,7 @@ See `python/prod/primitives/position/AnalyzeStableswapPosition.py` for the imple
 | Q1.2 | `AnalyzePosition` (V2/V3), `AnalyzeBalancerPosition`, `AnalyzeStableswapPosition` |
 | Q1.3 | `AnalyzePosition` (V2/V3), `AnalyzeBalancerPosition`, `AnalyzeStableswapPosition` |
 | Q1.4 | `AnalyzePosition` (V2/V3), `AnalyzeBalancerPosition`, `AnalyzeStableswapPosition` |
-| Q2.1 | `SimulatePriceMove` (V2/V3); Balancer/Stableswap extensions pending |
+| Q2.1 | `SimulatePriceMove` (V2/V3), `SimulateBalancerPriceMove`, `SimulateStableswapPriceMove` |
 | Q2.2 | `FindBreakEvenPrice` (V2/V3); Balancer/Stableswap extensions pending |
 | Q2.3 | `AssessDepegRisk` |
 | Q2.4 | `CheckTickRangeStatus` |
@@ -1067,8 +1162,8 @@ See `python/prod/primitives/position/AnalyzeStableswapPosition.py` for the imple
 | Q4.1 | `CompareProtocols` |
 | Q4.2 | `DiscoverPools` → `CheckPoolHealth` per pool |
 | Q4.3 | `CompareFeeTiers` |
-| Q5.1 | `SimulatePriceMove` at multiple levels |
-| Q5.2 | `SimulatePriceMove` with scaled position |
+| Q5.1 | `SimulatePriceMove` (V2/V3), `SimulateBalancerPriceMove`, `SimulateStableswapPriceMove` — at multiple levels |
+| Q5.2 | `SimulatePriceMove` (V2/V3), `SimulateBalancerPriceMove`, `SimulateStableswapPriceMove` — with scaled position |
 | Q5.3 | `FindBreakEvenTime` |
 | Q6.1 | `AggregatePortfolio` → cross-protocol: `AnalyzePosition` | `AnalyzeBalancerPosition` | `AnalyzeStableswapPosition` |
 | Q6.2 | `AggregatePortfolio` |
@@ -1184,13 +1279,13 @@ python/prod/
 | **Question categories** | 9 |
 | **Section 2 primitives (original spec)** | 19 |
 | **Primitives shipped from original spec** | 17 (missing: AssessLiquidityDepth, DiscoverPools) |
-| **Cross-protocol sibling primitives** | 3 (AnalyzeBalancerPosition, AnalyzeStableswapPosition, + AggregatePortfolio extension) |
-| **Total primitives shipped** | 20 |
+| **Cross-protocol sibling primitives** | 5 (AnalyzeBalancerPosition, AnalyzeStableswapPosition, SimulateBalancerPriceMove, SimulateStableswapPriceMove, + AggregatePortfolio extension) |
+| **Total primitives shipped** | 22 |
 | **Primitive sub-packages** | 8 |
 | **New derivations required** | 4 (FindBreakEvenPrice, FindBreakEvenTime, max slippage inversion, tick traversal) |
 | **New derivations completed** | 3 (FindBreakEvenPrice V2/V3 closed form, FindBreakEvenTime fee-rate annualization, AssessDepegRisk stableswap-invariant expansion) |
 | **New derivations pending** | Tick traversal (AssessLiquidityDepth), FindBreakEven extensions for Balancer and Stableswap |
-| **Total test count** | 459 passing |
+| **Total test count** | 504 passing |
 | **Day-one launch blockers** | 0 |
 
 ---
