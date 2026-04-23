@@ -23,3 +23,5 @@ from .TickRangeEvaluation import TickRangeEvaluation, RangeMetrics
 from .ProtocolComparison import ProtocolComparison, ProtocolMetrics
 from .BalancerPositionAnalysis import BalancerPositionAnalysis
 from .StableswapPositionAnalysis import StableswapPositionAnalysis
+from .BalancerPriceMoveScenario import BalancerPriceMoveScenario
+from .StableswapPriceMoveScenario import StableswapPriceMoveScenario

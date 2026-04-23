@@ -4,3 +4,5 @@ from .FindBreakEvenPrice import FindBreakEvenPrice
 from .FindBreakEvenTime import FindBreakEvenTime
 from .AnalyzeBalancerPosition import AnalyzeBalancerPosition
 from .AnalyzeStableswapPosition import AnalyzeStableswapPosition
+from .SimulateBalancerPriceMove import SimulateBalancerPriceMove
+from .SimulateStableswapPriceMove import SimulateStableswapPriceMove
