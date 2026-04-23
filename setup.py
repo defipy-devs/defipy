@@ -43,6 +43,7 @@ setup(name='DeFiPy',
           'defipy.primitives',
           'defipy.primitives.position',
           'defipy.tools',
+          'defipy.twin',
       ],
       install_requires=[
           # Math & numerics
