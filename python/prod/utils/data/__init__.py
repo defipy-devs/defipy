@@ -7,6 +7,7 @@ from .SlippageAnalysis import SlippageAnalysis
 from .TickRangeStatus import TickRangeStatus
 from .BreakEvenAlphas import BreakEvenAlphas
 from .BreakEvenTime import BreakEvenTime
+from .MEVDetectionResult import MEVDetectionResult
 from .PoolHealth import PoolHealth
 from .RugSignalReport import RugSignalReport
 from .PortfolioPosition import PortfolioPosition
