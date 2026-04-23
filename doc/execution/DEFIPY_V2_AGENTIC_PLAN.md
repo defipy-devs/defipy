@@ -105,6 +105,59 @@ Don't judge it by:
 
 ---
 
+## Competitive Landscape
+
+Before the v2.0 README or Phase 3 announcement commits to positioning claims, the landscape needs to be named honestly. The short version: **DeFiPy is effectively uncontested in the search space where Python developers actually find DeFi libraries.** The longer version separates discoverability from existence.
+
+### Discovery by Python developers (Google "defi python", "python AMM library", "uniswap python SDK")
+
+DeFiPy is the answer. The closest precedent is `gauss314/defi` on PyPI — named literally `defi`, which should make it the default result — but:
+- Largely stale; last substantive updates years ago
+- V2-only, uses the generic textbook IL formula `IL = 2√p/(1+p) − 1`
+- Utilities grab-bag (IL calculator + CoinGecko wrappers + PancakeSwap API queries), not a primitives library
+- No agentic claims, no composition pattern, no multi-protocol invariant math
+- No MCP integration
+
+Nothing else ranks for these queries. A handful of one-off simulators, hedging calculators, and Excel workbooks exist in the long tail but don't surface on real searches.
+
+DeFiPy's existing ReadTheDocs presence has compounded search equity over multiple years. It ranks above anything else for the relevant Python-developer queries today. That's a real asset, and the Two-Phase release plan is specifically structured to preserve it (see the "Why RTD is never hard-deprecated" section).
+
+### Discovery inside MCP ecosystem catalogs (mcpmarket.com, FlowHunt, MCP server lists)
+
+A small set of DeFi-adjacent MCP servers exist:
+- **Uniswap PoolSpy MCP** — tracks newly-created V3 pools across 9 chains (pool discovery only; overlaps DeFiPy's deferred `DiscoverPools` stretch goal, not any shipped primitive)
+- **Uniswap Trader MCP** — AI agents executing token swaps with routing (execution-focused, which DeFiPy explicitly doesn't do)
+- **Uniswap Pools MCP** — V2/V3/V4 pool data fetching
+- **"Crypto Liquidity Pool Analyzer" Claude Code Skill** — claims IL calculations across Uniswap/Curve/Balancer; almost certainly uses textbook approximations rather than hand-derived multi-protocol invariants
+- **WAIaaS MCP** — 45-tool wallet/DeFi/NFT/payments surface (much broader, much less depth; different category)
+
+None of these surface on Python-package searches. All are discoverable only by users already browsing MCP directories — a near-disjoint audience from the Python developers who would find DeFiPy on Google. None ship exact cross-protocol invariant math. Most wrap chain queries from The Graph.
+
+### What this means for positioning
+
+**Safe claims for the v2.0 README and Phase 3 announcement:**
+- "The Python SDK for agentic DeFi" — defensible because alternatives don't surface on `defi python`
+- "Hand-derived exact math across four AMM families" — verifiable, specific, true
+- "Composable typed primitives, substrate not agent" — architectural claim backed by the codebase
+- "Most DeFi tools wrap APIs. DeFiPy ships the math." — accurate contrast against both Python competitors and MCP servers
+
+**Claims to avoid:**
+- "The first DeFi Python library" — gauss314/defi predates it by years, even if stale
+- "The only" or "no alternatives exist" — MCP servers exist, they just don't compete in the same discovery space
+- "Unique" as a standalone word — always pair with the specific axis (math depth, primitive composition, substrate framing)
+
+### Strategic implication for Phase 2
+
+Two forces could erode the current positioning over the 9-12 month Phase 2 window:
+
+1. **AI-search shift.** If developers start asking Claude or ChatGPT "what's a Python library for DeFi agents?" instead of Googling, the answer depends on what's in LLM training data and MCP catalog signals — not on ReadTheDocs rank. This risk argues *for* MCP-native v2.0 positioning: being the MCP-discoverable Python DeFi library compounds on both search surfaces.
+
+2. **New entrants.** 9-12 months is enough for a direct competitor to ship. The incumbent advantage matters here — shipping v2.0 now and claiming the "agentic DeFi Python SDK" category before anyone else does is worth more than shipping a perfect v2.0 six months late.
+
+Both risks argue for the ship-now-iterate posture the 6-day push codifies.
+
+---
+
 ## The constitutional distinction
 
 The boundary is drawn by **what kind of thing each library is**, not by feature-by-feature decisions:
@@ -277,21 +330,23 @@ Strategic decision: ship a **minimal agentic skeletal structure** as DeFiPy v2.0
 
 The bar for v2.0: *someone can bind DeFiPy primitives to an LLM and ask an LP question, get an answer backed by exact math.* That's it. If that loop closes end-to-end on Day 3, the "Python SDK for Agentic DeFi" tagline is earned.
 
-### Day 1 — `defipy.tools` (schema generation, Anthropic only)
+### Day 1 — `defipy.tools` (MCP schema generation)
 
-**Goal:** Primitives are self-describing. One function call returns Anthropic tool-use schemas for a curated set of ~10 primitives.
+**Goal:** Primitives are self-describing. One function call returns MCP tool definitions for a curated set of ~10 primitives.
 
 **Deliverables:**
 - `python/prod/tools/__init__.py` — module init, public API
-- `python/prod/tools/schemas.py` — introspects primitive classes, emits Anthropic-format JSON
+- `python/prod/tools/schemas.py` — introspects primitive classes, emits MCP tool definitions
 - `python/prod/tools/registry.py` — curated list of exposed primitives (not all 22 — curated to the most useful leaf primitives for v2.0)
 - Tests in `python/test/tools/test_schemas.py`
 - Update `setup.py` to include `defipy.tools`
 
 **Scope cuts for minimal ship:**
-- **Anthropic format only.** OpenAI and MCP schema support deferred to v2.1.
+- **MCP format only.** Anthropic tool-use JSON and OpenAI function-calling deferred to v2.1 (both derivable from MCP schemas with small wrappers).
 - **Hand-curated tool descriptions** (not auto-generated from docstrings). Docstrings are verbose; LLMs want tight tool descriptions.
 - **Primitive-to-tool mapping is manual.** Not all 22 primitives make sense as tools — expose the leaf primitives first, let composition happen LLM-side.
+
+**Why MCP-first for v2.0:** Strategic. MCP is the direction the agent ecosystem is heading (Claude Desktop, Claude Code, and third-party MCP clients). Shipping DeFiPy as an MCP-native tool is a stronger positioning than "we emit vendor-specific tool-use JSON." A developer who wants the Anthropic SDK path can derive it trivially from MCP schemas; the reverse is more work. MCP-native also aligns with the el-cheapo execution path — demo runs on Claude Max via Claude Desktop / Claude Code, zero API-billing exposure.
 
 **Curated v2.0 tool set (~10 primitives):**
 - `AnalyzePosition` (V2/V3)
@@ -306,6 +361,8 @@ The bar for v2.0: *someone can bind DeFiPy primitives to an LLM and ask an LP qu
 - `AssessDepegRisk`
 
 Covers the bulk of Q1-Q9 across protocols. Position analytics + scenario simulation + pool health + slippage + depeg risk.
+
+**Full rationale, coverage matrix, per-primitive tool descriptions, and Day 1 assertion shape:** see `doc/execution/V2_TOOL_SET.md`. That doc is authoritative for "what primitives ship as MCP tools in v2.0" — if this section and that doc ever disagree, V2_TOOL_SET.md wins.
 
 ### Day 2 — `defipy.twin` (MockProvider + abstraction, LiveProvider stub)
 
@@ -352,12 +409,19 @@ packages=[
 
 Also: bump version to `2.0.0`, update description to `"Python SDK for Agentic DeFi"`, verify install in a clean venv with `pip install -e .` + import test.
 
-**Afternoon — Demo script:**
-- Location: `python/notebooks/defimind_demo.py` — **not** inside the library (demo, not shipped code)
-- Uses `anthropic` SDK (demo-only dep, not in `install_requires`)
-- Canonical example: user asks 2-3 LP questions, Claude calls the tools via tool-use, results get synthesized
-- Tool-use loop: Claude calls tool → demo executes the primitive against a MockProvider twin → result returned → Claude continues
-- **Print receipts to stdout** — every primitive call logs (name, inputs, result). This is the "observability" story without building observability infrastructure.
+**Afternoon — MCP server (the demo):**
+- Location: `python/mcp/defipy_mcp_server.py` — **not** inside the library core (runs as an MCP server, imports defipy as a dependency)
+- Uses `mcp` Python SDK from Anthropic (https://github.com/modelcontextprotocol/python-sdk) — demo-only dep, not in `install_requires`
+- Implements MCP stdio transport: exposes the curated 10-primitive tool set via `list_tools()` and `call_tool()`
+- Each `call_tool` invocation: builds a twin from MockProvider, runs the primitive against it, returns the typed dataclass result as a structured MCP content block
+- **Print receipts to stderr** — every primitive call logs (tool name, inputs, result). Users see this when running the MCP server with verbose logging. This is the "observability" story without building observability infrastructure.
+- Also ship: `python/mcp/README.md` with `claude_desktop_config.json` snippet showing how to wire the server to Claude Desktop, and `claude mcp add` command for Claude Code
+
+**What the "demo" looks like:**
+
+There's no Python script that runs programmatically. The demo is connecting the MCP server to Claude Desktop (or Claude Code) and having a live conversation. User opens Claude Desktop, sees DeFiPy tools available, asks an LP question, Claude calls the tools, answer appears. **Zero API-billing cost** — Claude Max covers it.
+
+Record a short screen capture of the Claude Desktop session for the README / docs. That video is the visible artifact for v2.0.
 
 **Example questions the demo handles:**
 1. "I have 10 LP tokens in a 50/50 ETH/DAI Balancer pool where I deposited 5 ETH and 5000 DAI. What's my IL if ETH drops 30%?"
@@ -376,31 +440,68 @@ Also: bump version to `2.0.0`, update description to `"Python SDK for Agentic De
 - **Release notes draft** — ~200-word announcement explaining the substrate positioning, ready to paste into GitHub release / social
 - **Run the full test suite** — 504 + new tools tests + new twin tests should land somewhere around ~540 passing
 - **Tag v2.0.0 locally** — don't push to PyPI until the install is verified end-to-end
+- **Prepare MCP catalog listing copy** — draft short + long descriptions, screenshot of the Claude Desktop session from Day 3, list of tools exposed, GitHub URL, installation command. Submissions happen post-ship (Day 7+), but the copy gets written here while the context is fresh.
+
+### MCP catalog submissions (post-ship, Day 7+)
+
+Once v2.0.0 is tagged and pushed to PyPI, submit to MCP directories. Each listing is low-cost (minutes to hours), additive, and compounds for AI-search-era discovery. DeFiPy's distinctive positioning (exact math across 4 AMMs, 22 composable primitives) plays well in these catalogs because they're browsed by agent builders specifically looking for depth beyond chain-query wrappers.
+
+**Priority catalogs:**
+1. **modelcontextprotocol.io community servers list** — the official MCP site maintained by Anthropic. Highest-signal listing. PR to the community servers repo.
+2. **mcpmarket.com** — the biggest aggregated MCP catalog. Self-serve submission. Appears to be the primary discovery surface for non-technical users exploring MCP tools.
+3. **awesome-mcp-servers** GitHub repo — community-maintained curated list. PR-based. High visibility for developers doing GitHub topic searches.
+4. **FlowHunt MCP directory** — FlowHunt catalogs the servers and integrates them into their platform. Submission likely requires creating an account.
+5. **SERP AI MCP server directory** — another aggregator. Appears to pull from GitHub automatically but confirmation not hurt.
+
+**What each listing needs:**
+- Short description (1-2 sentences): "MCP server exposing exact-math DeFi primitives for LP diagnostics across Uniswap V2, Uniswap V3, Balancer, and Curve-style Stableswap. Built on DeFiPy's 22 composable typed primitives."
+- Long description (3-5 paragraphs): what it does, what makes it different (hand-derived invariant math, substrate not agent, non-executing/read-only), installation steps, example queries
+- Installation command: `pip install defipy` + the Claude Desktop config snippet from `python/mcp/README.md`
+- Example queries: the 3 canonical LP questions from Day 3 demo
+- Screenshot or short video: the Claude Desktop session capture from Day 3
+- GitHub URL, PyPI URL, ReadTheDocs URL
+- Category tags: DeFi, Analytics, Uniswap, Balancer, Curve, Python
+- License (Apache 2.0)
+
+**Positioning language (reuse from Competitive Landscape section):**
+- "Most DeFi MCP tools wrap APIs. DeFiPy ships the math."
+- "Hand-derived exact math across four AMM families."
+- "22 composable typed primitives — substrate, not agent."
+- Do not claim "the first" or "the only" in any listing.
+
+**Expected impact:**
+- **Modest initial traffic** — tens to low hundreds of visits in the first weeks. MCP directory audiences are smaller than Google's Python-developer audience.
+- **Compounding AI-search signal** — when users in 6-12 months ask Claude/ChatGPT "is there a Python library for DeFi with MCP support?", training-time and retrieval signals from these catalogs affect the answer.
+- **Category incumbency** — being the listed "Python DeFi MCP library" means new entrants in Phase 2 arrive second.
+
+Treat catalog submissions as quiet technical distribution, separate from the Phase 3 public launch. Don't conflate them with the defipy.org announcement — they're compounding infrastructure for discovery, not a launch moment.
 
 ### What's explicitly deferred to v2.1+
 
 Written down so expectations are clear:
 
 - ❌ `LiveProvider` implementation (ABC ships; impl is v2.1)
-- ❌ OpenAI + MCP tool schema formats (Anthropic only for v2.0)
-- ❌ `defipy.observability` module (Python logging + demo stdout receipts are enough for v2.0)
+- ❌ Anthropic tool-use JSON + OpenAI function-calling schema formats (MCP only for v2.0; both derivable from MCP schemas with small wrappers)
+- ❌ `defipy.observability` module (MCP server stderr receipts are enough for v2.0)
 - ❌ Planning primitives category (`OptimalDepositSplit` demonstrates the pattern; formalization is v2.1)
 - ❌ `FindBreakEvenPrice` / `CalculateSlippage` Balancer+Stableswap extensions (Bucket B, separate track)
 - ❌ `AssessLiquidityDepth` (original Tier 1 remaining, V3 tick-walking — dedicated session)
 - ❌ `DiscoverPools` (stretch goal from original spec)
-- ❌ DeFiMind as a proper separate repo (the demo script is enough signal for v2.0)
+- ❌ DeFiMind as a proper separate repo (the MCP server is enough signal for v2.0)
 
 ### Risk list for the 3-4 day code push
 
-**1. Tool schema format surprises.** Anthropic's tool-use schema requirements are fiddly around complex types. `Optional[List[float]]` on `PortfolioPosition.entry_amounts` might need hand-curated JSON rather than auto-generation. Mitigation: curated mapping in `registry.py`, not pure introspection.
+**1. MCP schema format subtleties.** MCP tool definitions wrap JSON Schema for the input, but require specific content-block types for the response. Complex return types like `Optional[List[float]]` on `PortfolioPosition.entry_amounts` might need hand-curated schemas. Mitigation: curated mapping in `registry.py`, not pure introspection.
 
-**2. MockProvider recipe API design.** Test fixtures evolved organically (factory fixtures for parameter sweeps, simple fixtures for defaults). Deciding MockProvider's canonical API (recipe names? factory methods? both?) deserves 30 minutes of design before coding on Day 2.
+**2. MCP server state across calls.** MCP server process lives for the duration of the Claude session. Each `call_tool` invocation should build a fresh twin (stateless) rather than maintain state — matches DeFiPy's primitive contract. Mitigation: explicit "build fresh twin per call" pattern documented in the server code.
 
-**3. Anthropic tool-use loop subtleties.** Multiple tool calls in one response, `tool_result` blocks, error handling. First-time writing this loop takes 2-3 hours to get right. Budget accordingly on Day 3 afternoon.
+**3. MockProvider recipe API design.** Test fixtures evolved organically (factory fixtures for parameter sweeps, simple fixtures for defaults). Deciding MockProvider's canonical API (recipe names? factory methods? both?) deserves 30 minutes of design before coding on Day 2.
 
 **4. `gmpy2` install pain on clean machines.** Fresh `pip install defipy` might trip on `gmpy2` compilation. Test install in a clean venv before announcing. If `gmpy2` is a real headache, consider whether it's essential or can become optional.
 
 **5. Packaging sub-packages correctly.** Fix flagged for Day 3 morning. Verify against actual `pip install` output — egg-info may need rebuilding.
+
+**6. MCP config paths.** Claude Desktop's config lives at `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS); Claude Code uses `claude mcp add` command or per-project `.mcp.json`. Document both paths explicitly in `python/mcp/README.md` so users don't have to hunt.
 
 ---
 
@@ -408,12 +509,26 @@ Written down so expectations are clear:
 
 Docs reorg is its own concentrated work, not squeezed into Day 4 polish. Target: **ReadTheDocs IA that reflects the substrate/application framing** — visitors understand within 30 seconds that DeFiPy is exact-math infrastructure, not an agent product.
 
+### MCP tool set vs. ReadTheDocs coverage — important distinction
+
+Two different audiences, two different coverage scopes. Don't conflate them:
+
+| Surface | Audience | Scope | Why |
+|---|---|---|---|
+| **MCP tool set (Day 1)** | LLM calling tools via Claude Desktop/Code | **10 curated primitives** | Tool-use selection degrades with too many options. Curated leaves. Composition happens LLM-side. |
+| **ReadTheDocs (Days 5-6)** | Python developers reading reference docs | **All 22 primitives** | A developer doing `from defipy import EvaluateRebalance` expects docs for it. Library surface is fully visible. |
+
+The Primitives section of the v2 ReadTheDocs covers **all 22 primitives across 8 sub-packages.** The curation of 10 for MCP is a tactical v2.0 decision about LLM ergonomics; it's not a statement about which primitives are "real." Every shipped primitive is importable, documented, and tested.
+
+The **Agentic DeFi → Tool Schemas** section of the docs explicitly names which 10 are in the v2.0 MCP tool set and why, with a link to `doc/execution/V2_TOOL_SET.md` for the rationale. Readers who want to compose beyond the 10 get pointed at the full 22 in the Primitives section.
+
 ### Decisions locked in
 
 - **Sections kept from v1 docs:** DeFiPy Ecosystem, Getting Started, Tutorials, DeFi Math, API Reference
 - **Sections dropped from v1 docs:** Analytics (v1 framing), Onchain (legacy agents)
 - **Sidebar ordering: Option A** — foundations first, agentic as capstone
 - **Home page title change:** "DeFiPy: Python SDK for DeFi Analytics and Agents" → "DeFiPy: Python SDK for Agentic DeFi" with subtitle "Exact-math substrate for autonomous and LLM-driven DeFi systems."
+- **Primitives section coverage: full 22 primitives**, not the 10-primitive MCP curation
 
 ### Target IA (Option A)
 
@@ -810,8 +925,9 @@ A fresh Claude session landing on this plan should be able to start Day 1 withou
 
 1. `doc/PROJECT_CONTEXT.md` — current library state (22 primitives, 504 tests, architecture highlights, Key Internal Conventions, test fixtures). This orients on what already exists.
 2. `doc/execution/DEFIPY_V2_AGENTIC_PLAN.md` — this doc. The substrate/application split, the six gaps, the Two-Phase strategy, the Day 1-6 execution plan.
-3. `doc/execution/PRIMITIVE_AUTHORING_CHECKLIST.md` — mechanical conventions for adding primitives, including §10 (invariant-math vs state-threading) and §11 (sibling primitives). Relevant if any primitive-layer work surfaces during v2 build.
-4. `doc/execution/DEFIMIND_TIER1_QUESTIONS.md` — full 22-primitive spec with dataclass definitions and v1 implementation notes. Reference during Day 1 when choosing the curated tool set.
+3. `doc/execution/V2_TOOL_SET.md` — **authoritative spec for the 10 curated MCP tools**. Read before Day 1. Covers which primitives ship as MCP, which stay library-only, why, coverage matrix, LP-question mapping, per-primitive tool-description style, and the exact Day 1 assertion shape.
+4. `doc/execution/PRIMITIVE_AUTHORING_CHECKLIST.md` — mechanical conventions for adding primitives, including §10 (invariant-math vs state-threading) and §11 (sibling primitives). Relevant if any primitive-layer work surfaces during v2 build (unlikely — no new primitives ship in v2.0).
+5. `doc/execution/DEFIMIND_TIER1_QUESTIONS.md` — full 22-primitive spec with dataclass definitions and v1 implementation notes. Reference during Day 1 when writing MCP tool descriptions (for the 10 curated primitives, read the corresponding implementation notes here).
 
 ### 1. Verify working-branch state
 
@@ -838,21 +954,24 @@ The first file to create is `python/prod/tools/__init__.py`. Before writing, rea
 
 - `python/prod/primitives/position/AnalyzePosition.py` — canonical primitive pattern
 - `python/prod/utils/data/PositionAnalysis.py` — canonical result dataclass
-- One Anthropic tool-use schema example from Anthropic's API docs (https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview)
+- MCP tool definition format at https://modelcontextprotocol.io/docs/concepts/tools
+- MCP Python SDK at https://github.com/modelcontextprotocol/python-sdk
 
 Curated v2.0 tool set is defined in the Day 1 section above (~10 primitives). Don't expand the set in v2.0 — broader coverage is v2.1 work.
+
+**Important:** MCP-only for v2.0. Don't also emit Anthropic tool-use JSON or OpenAI function-calling format — both deferred to v2.1.
 
 First commit for Day 1 should be the `defipy/tools/` scaffold with the curated tool set and passing tests. Commit message pattern:
 
 ```
-feat(tools): defipy.tools module with Anthropic tool-use schemas
+feat(tools): defipy.tools module with MCP tool schemas
 
 Ships v2.0 Day 1 minimal agentic skeleton piece. Curated 10-primitive
 tool set covering position analysis, price scenarios, pool health,
 slippage, and depeg risk across V2/V3/Balancer/Stableswap.
 
 - tools/__init__.py, tools/schemas.py, tools/registry.py
-- Anthropic format only (OpenAI + MCP deferred to v2.1)
+- MCP format only (Anthropic tool-use + OpenAI deferred to v2.1)
 - Hand-curated tool descriptions (not auto-generated from docstrings)
 - Tests in python/test/tools/test_schemas.py
 - setup.py updated
@@ -866,10 +985,10 @@ Each day has a concrete pass/fail gate. Don't proceed to the next day until the 
 
 | Day | Gate |
 |---|---|
-| Day 1 | `from defipy.tools import get_schemas; schemas = get_schemas("anthropic")` returns a list of ~10 tool-use JSON objects. Tests pass. |
+| Day 1 | `from defipy.tools import get_schemas; schemas = get_schemas("mcp")` returns a list of ~10 MCP tool definitions. Tests pass. |
 | Day 2 | `from defipy.twin import MockProvider; p = MockProvider(); lp = p.v2_eth_dai()` returns a UniswapExchange. LiveProvider stub raises NotImplementedError with v2.1 message. |
-| Day 3 | Demo script runs end-to-end: Claude receives an LP question, calls `SimulatePriceMove` via tool use, primitive executes against a twin, Claude synthesizes an answer. Packaging fix verified by fresh venv install. |
-| Day 4 | README shows new tagline. CHANGELOG has v2.0 entry. Full suite ~540 tests passing. |
+| Day 3 | MCP server runs: wired to Claude Desktop / Claude Code, LP question asked, Claude calls a DeFiPy tool via MCP, primitive executes against a MockProvider twin, answer synthesized. Packaging fix verified by fresh venv install. |
+| Day 4 | README shows new tagline. CHANGELOG has v2.0 entry. Full suite ~540 tests passing. MCP server README + config snippets included. |
 | Day 5 | Sphinx builds locally without errors. Option A sidebar renders correctly. Home page tagline updated. |
 | Day 6 | ReadTheDocs build succeeds on push. All primitive categories have reference pages (autogenerated). Agentic DeFi + State Twin sections render. |
 
@@ -883,7 +1002,10 @@ Each day has a concrete pass/fail gate. Don't proceed to the next day until the 
 
 Common blockers and where to look:
 
-- **Anthropic tool-use schema format questions** → https://docs.claude.com/en/docs/agents-and-tools/tool-use/overview
+- **MCP schema format questions** → https://modelcontextprotocol.io/docs/concepts/tools
+- **MCP Python SDK reference** → https://github.com/modelcontextprotocol/python-sdk
+- **Claude Desktop MCP config** → `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS; see `python/mcp/README.md` (shipped Day 3) for exact format
+- **Claude Code MCP config** → `claude mcp add` command, or per-project `.mcp.json`
 - **MockProvider API design questions** → mirror `python/test/primitives/conftest.py` structure; promote fixture pools to public API unchanged
 - **Packaging failures on fresh install** → run `pip install -e .` in a clean venv, then `python -c "from defipy import AnalyzePosition"`; if ImportError, check the `packages=` list in `setup.py`
 - **Primitive authoring questions** (if any surface during v2 build) → PRIMITIVE_AUTHORING_CHECKLIST.md, especially §10 and §11
