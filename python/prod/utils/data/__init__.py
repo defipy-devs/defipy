@@ -18,3 +18,5 @@ from .FeeTierCandidate import FeeTierCandidate
 from .FeeTierComparison import FeeTierMetrics, FeeTierComparison
 from .DepositSplitResult import DepositSplitResult
 from .RebalanceCostReport import RebalanceCostReport
+from .TickRangeCandidate import TickRangeCandidate
+from .TickRangeEvaluation import TickRangeEvaluation, RangeMetrics
