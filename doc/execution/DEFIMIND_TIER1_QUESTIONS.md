@@ -368,6 +368,8 @@ class BreakEvenResult:
 
 **Answers:** Q5.3
 
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, V2/V3). 20 tests passing.
+
 **Constructor:** `FindBreakEvenTime()`
 
 **Signature:** `.apply(lp, entry_lp, position_size_lp, fee_rate_per_block) → BreakEvenTimeResult`
@@ -463,6 +465,8 @@ class TickRangeStatus:
 
 **Answers:** Q3.1, Q3.2
 
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, V3-only). 21 tests passing.
+
 **Constructor:** `EvaluateTickRanges()`
 
 **Signature:** `.apply(lp, position_size, candidate_ranges) → TickRangeEvaluation`
@@ -540,9 +544,11 @@ See `python/prod/primitives/optimization/OptimalDepositSplit.py` for the impleme
 
 **Answers:** Q3.4, Q8.4
 
-**Constructor:** `EvaluateRebalance()`
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, V2-only). 20 tests passing. See v1 Implementation Notes below.
 
-**Signature:** `.apply(lp, entry_lp, token_in, position_size_lp, new_lwr_tick=None, new_upr_tick=None) → RebalanceEvaluation`
+**Constructor (spec):** `EvaluateRebalance()`
+
+**Signature (spec):** `.apply(lp, entry_lp, token_in, position_size_lp, new_lwr_tick=None, new_upr_tick=None) → RebalanceEvaluation`
 
 **Returns:**
 ```python
@@ -559,15 +565,31 @@ class RebalanceEvaluation:
 
 **Internal calls:** `AnalyzePosition`, `WithdrawSwap`, `SwapDeposit`, `OptimalDepositSplit`
 
+#### v1 Implementation Notes (2026-04-23)
+
+Deepest-composition primitive shipped to date — chains four per-position primitives to answer "should I rebalance now or wait?"
+
+**V2-only scope, matching OptimalDepositSplit's dependency.** V3 rebalance requires the V3 path on OptimalDepositSplit which is blocked by the UniV3Helper fee-passthrough backlog item. V3 inputs raise `ValueError`.
+
+**Metrics-only, no recommendation string.** The spec's `recommendation: str` field was dropped per the signal-surfacer convention. Rebalance decisions are driven by caller-specific context the primitive can't see (gas price expectations, time horizon, risk tolerance, tax implications of IL crystallization). v1 exposes the net-benefit number and the decomposition; the caller names the verdict.
+
+**Single candidate, not N.** v1 takes one hypothetical new position (target allocation via `token_in` + implicit current-price reallocation). N-candidate ranking shape may come later; for now, callers wanting to compare multiple new positions call the primitive N times and rank themselves. Simpler to ship, composable with existing ranking patterns.
+
+**Explicit cost decomposition.** `withdrawal_slippage`, `deposit_slippage`, and `total_rebalance_cost` are surfaced separately from `projected_improvement` and `net_benefit`. Lets the caller see whether a borderline net-benefit number is driven by tiny-swap arithmetic noise or genuine cost-vs-benefit tension.
+
+See `python/prod/primitives/optimization/EvaluateRebalance.py` for the implementation.
+
 ---
 
 ### Primitive 10: `CompareProtocols`
 
 **Answers:** Q4.1, Q8.3
 
-**Constructor:** `CompareProtocols()`
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0). 23 tests passing. See v1 Implementation Notes below.
 
-**Signature:** `.apply(lp_a, lp_b, amount, token=None) → ProtocolComparison`
+**Constructor (spec):** `CompareProtocols()`
+
+**Signature (spec):** `.apply(lp_a, lp_b, amount, token=None) → ProtocolComparison`
 
 **Returns:**
 ```python
@@ -590,6 +612,24 @@ class ProtocolComparison:
 ```
 
 **Internal calls:** `AnalyzePosition` on each twin, `CalculateSlippage` on each twin, `LPQuote` on each
+
+#### v1 Implementation Notes (2026-04-23)
+
+Flagship cross-protocol primitive. Same capital, same token pair (or depeg scenario), different AMM invariant curves — directly answers Q4.1 ("is Curve better than Uniswap for this pair?") with exact math rather than narrative.
+
+**N-candidate list input, not binary A-vs-B.** v1 takes a list of `ProtocolCandidate` inputs (one per pool) rather than the spec's `lp_a, lp_b` pair. Matches AggregatePortfolio's and CompareFeeTiers's list-of-inputs pattern. A caller with two protocols passes a 2-element list; a caller comparing V2 + V3 + Balancer + Stableswap on the same stablecoin pair passes a 4-element list.
+
+**Metrics-only, no `recommendation` field.** The spec's `recommendation` and `reasoning` strings were dropped per the signal-surfacer convention. Protocol choice depends on caller-specific considerations (which token dominates volatility, target holding period, stablecoin vs. volatile pair, risk tolerance) the primitive can't see. v1 exposes IL, fee yield (where observable), slippage, and capital-efficiency metrics side-by-side in consistent shape; caller chooses.
+
+**Stableswap IL via AssessDepegRisk composition.** Stableswap candidates compose AssessDepegRisk internally for the IL-at-current-price metric — same invariant-math path, same reachability semantics (IL can be None for unreachable scenarios). First primitive to demonstrate cross-protocol IL comparison at full fidelity: V2/V3 via UniswapImpLoss, Balancer via BalancerImpLoss, Stableswap via AssessDepegRisk's derivation.
+
+**Slippage and fee yield degrade gracefully.** `slippage_at_amount` is populated for V2/V3 via CalculateSlippage; Balancer and Stableswap report `None` in v1 (CalculateSlippage is V2/V3-only, tracked as a cleanup-backlog item). `fee_apr` is similarly `None` for protocols without per-LP fee attribution. The metric shape stays consistent so the cross-protocol ranking remains meaningful on the axes that are populated.
+
+**Common-pair enforcement.** Candidates must share the same pair of token symbols. Cross-pair comparison (ETH/USDC V2 vs. BTC/USDC Balancer) collapses independent questions; v1 raises `ValueError` early and directs the caller to group by pair. Same stance as CompareFeeTiers.
+
+**Composition pattern.** Depth-chains AnalyzePosition + CalculateSlippage + CheckPoolHealth + AssessDepegRisk (for stableswap) across each candidate, then breadth-combines the results. The deepest-composition primitive of the day.
+
+See `python/prod/primitives/comparison/CompareProtocols.py` for the implementation and `ProtocolCandidate`, `ProtocolMetrics`, `ProtocolComparison` in `utils/data/` for the shipped dataclass shapes.
 
 ---
 
@@ -648,9 +688,11 @@ See `python/prod/primitives/comparison/CompareFeeTiers.py` for the implementatio
 
 **Answers:** Q6.1, Q6.2, Q6.3
 
+**Status:** ✅ Shipped 2026-04-22 (v1.2.0, V2/V3). Cross-protocol extension shipped 2026-04-23. 21 tests at v1 + 13 cross-protocol tests = 34 total. See v1 Implementation Notes below.
+
 **Constructor:** `AggregatePortfolio()`
 
-**Signature:** `.apply(positions: list[tuple[lp, entry_lp, size]]) → PortfolioAnalysis`
+**Signature:** `.apply(positions: list[PortfolioPosition]) → PortfolioAnalysis`
 
 **Returns:**
 ```python
@@ -674,6 +716,28 @@ class PortfolioAnalysis:
 ```
 
 **Internal calls:** `AnalyzePosition` per position, token overlap detection
+
+#### v1 Implementation Notes (2026-04-22) and cross-protocol extension (2026-04-23)
+
+Originally shipped V2/V3-only; extended to full cross-protocol dispatch in the 2026-04-23 part 3 session after the sibling cross-protocol position analyzers (`AnalyzeBalancerPosition`, `AnalyzeStableswapPosition`) landed.
+
+**Spec-level field name changes.** The spec's `correlation_warnings` became `shared_exposure_warnings` (token overlap is not statistical correlation), `exit_priority` became `pnl_ranking` (the primitive ranks, the caller decides exit order). Signal-surfacer-not-verdict-generator convention. The spec's `total_il` was dropped — the portfolio-level IL isn't a clean sum across heterogeneous pools (different numeraires, different IL semantics across protocols); per-position `il_percentage` stays on each PositionSummary for callers who want to roll it up themselves.
+
+**Structured input via PortfolioPosition.** The spec's `list[tuple[lp, entry_lp, size]]` was replaced with a typed `PortfolioPosition` dataclass. Lets the input carry optional fields (display name, holding period, V3 ticks, protocol-specific entry shapes) without positional-tuple growth. Matches CompareFeeTiers's and CompareProtocols's list-of-dataclass input pattern.
+
+**Cross-protocol dispatch (2026-04-23 extension).** isinstance-based protocol detection routes each position to the appropriate analyzer: V2/V3 → AnalyzePosition, Balancer → AnalyzeBalancerPosition, Stableswap → AnalyzeStableswapPosition. `PositionSummary` gained a `protocol: str` field ({uniswap_v2, uniswap_v3, balancer, stableswap}) for consumer-side dispatch without re-inspecting the lp object. `analysis` field retyped to `Any` (was `PositionAnalysis`) to accept any of the three analyzer output variants; callers who need protocol-specific fields do isinstance-dispatch on `.analysis`.
+
+**Numeraire generalization.** The legacy "common token0" rule generalized to "common first-token-in-pool-insertion-order." V2/V3 still use `lp.token0`; Balancer and Stableswap use `list(lp.tkn_reserves.keys())[0]`. Mixed-first-token portfolios raise `ValueError` — callers group by first-token symbol and call once per group. Same rejection shape as v1 but generalized across protocols.
+
+**PortfolioPosition grew an `entry_amounts: Optional[List[float]]` field** for the stableswap path. V2/V3/Balancer positions still use `entry_x_amt` + `entry_y_amt`. Stableswap positions must provide `entry_amounts` instead; aggregation raises `ValueError` if a stableswap position lacks it.
+
+**Stableswap unreachable-alpha handling.** Positions whose analyzer returns `il_percentage = None` (unreachable regime) contribute 0 to the scalar totals and get flagged in `shared_exposure_warnings` with an identifying note. Keeps aggregation meaningful for the reachable positions; the skip is explicit rather than silent.
+
+**Fee income scope.** `total_fees` in v1 is contributed to only by V2/V3 positions. Balancer and Stableswap fee_income = 0 pending per-LP fee attribution in the sibling repos. Documented; callers tracking Balancer/Stableswap fee yield must track externally.
+
+**Input-order preservation with independent ranking.** Positions stay in caller's input order in `positions[]`; worst-first ordering exposed via `pnl_ranking` (names, not indices). Reordering the caller's data would be surprising — both views available without either rewriting the other.
+
+See `python/prod/primitives/portfolio/AggregatePortfolio.py` for the implementation.
 
 ---
 
@@ -797,6 +861,8 @@ class SlippageAnalysis:
 
 **Answers:** Q8.5
 
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, V2/V3). 20 tests passing.
+
 **Constructor:** `DetectMEV()`
 
 **Signature:** `.apply(lp, token_in, amount_in, actual_output) → MEVDetectionResult`
@@ -875,16 +941,123 @@ class PoolDiscoveryResult:
 
 ---
 
+## Cross-Protocol Extensions (beyond the original 19-primitive spec)
+
+After the 17 Tier 1 primitives + CompareProtocols shipped, an audit identified opportunities to extend position-level analysis across the non-Uniswap AMM families. The result: three sibling primitives to `AnalyzePosition` answering the same Q1.1–Q1.4 questions on Balancer and Stableswap pools. The cross-protocol extension pattern is codified in `PRIMITIVE_AUTHORING_CHECKLIST.md` §11.
+
+---
+
+### Primitive 20: `AnalyzeBalancerPosition`
+
+**Answers:** Q1.1, Q1.2, Q1.3, Q1.4 (on Balancer weighted pools, 2-asset)
+
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, 2-asset Balancer). 22 tests passing.
+
+**Constructor:** `AnalyzeBalancerPosition()`
+
+**Signature:** `.apply(lp, lp_init_amt, entry_base_amt, entry_opp_amt, holding_period_days=None) → BalancerPositionAnalysis`
+
+**Returns:**
+```python
+@dataclass
+class BalancerPositionAnalysis:
+    base_tkn_name: str
+    opp_tkn_name: str
+    base_weight: float                  # Balancer-distinguishing field
+    current_value: float                # Denominated in opp-token units
+    hold_value: float
+    il_percentage: float
+    il_with_fees: float
+    fee_income: float                   # Always 0.0 in v1 (see Notes)
+    net_pnl: float
+    real_apr: Optional[float]
+    diagnosis: str                      # "net_positive" | "il_dominant"
+    alpha: float                        # current_price / entry_price
+```
+
+**Internal calls:** `balancerpy.analytics.risk.BalancerImpLoss`
+
+#### v1 Implementation Notes (2026-04-23)
+
+Sibling to `AnalyzePosition` for Balancer 2-asset weighted pools. Same answer shape (IL decomposition from price divergence) adapted to the weighted AMM's base-weight-dependent IL formula.
+
+**2-asset scope only.** Inherited from BalancerImpLoss. N-asset extension requires extending BalancerImpLoss first and is tracked for future work. N>2 lps raise `ValueError` via BalancerImpLoss's own validation.
+
+**No fee income attribution in v1.** Balancer's `collected_fees` on the vault is pool-level with no per-LP attribution in the pool object. Surfacing a derived fee number would fabricate precision the state doesn't carry. `fee_income = 0.0` always; `il_with_fees == il_percentage`. When fee attribution lands (future balancerpy work), the diagnosis enum expands to three buckets matching AnalyzePosition.
+
+**Numeraire: opp-token units.** All values are in the opp (second) token. Matches BalancerImpLoss's convention; differs from AnalyzePosition's token0 numeraire. Portfolio aggregation normalizes per-pool numeraire to the common first-token symbol via AggregatePortfolio's numeraire rule.
+
+**Fee-free spot from reserves and weights directly.** `spot = (b_opp / w_opp) / (b_base / w_base)` rather than `lp.get_price()` which bakes in the 0.25% SWAP_FEE scale factor. Documented as a Key Internal Convention in PROJECT_CONTEXT.md; any future Balancer primitive wanting spot-for-IL should use the same approach.
+
+**Input: entry amounts, not alpha.** The public surface takes `entry_base_amt` and `entry_opp_amt` for the caller's natural framing ("what did I deposit?") and derives alpha internally. Callers wanting to explore hypothetical alphas should compose with CompareProtocols (symmetric shock) or call BalancerImpLoss.calc_iloss directly.
+
+See `python/prod/primitives/position/AnalyzeBalancerPosition.py` for the implementation.
+
+---
+
+### Primitive 21: `AnalyzeStableswapPosition`
+
+**Answers:** Q1.1, Q1.2, Q1.3, Q1.4 (on Curve-style stableswap pools, 2-asset)
+
+**Status:** ✅ Shipped 2026-04-23 (v1.2.0, 2-asset Stableswap). 21 tests passing.
+
+**Constructor:** `AnalyzeStableswapPosition()`
+
+**Signature:** `.apply(lp, lp_init_amt, entry_amounts, holding_period_days=None) → StableswapPositionAnalysis`
+
+**Returns:**
+```python
+@dataclass
+class StableswapPositionAnalysis:
+    token_names: List[str]              # Pool tokens in insertion order
+    A: int                              # Amplification coefficient
+    per_token_init: List[float]         # Entry composition
+    per_token_current: List[float]      # Current composition (pool share)
+    current_value: float                # In peg numeraire (tokens 1:1)
+    hold_value: float
+    il_percentage: Optional[float]      # None in unreachable-alpha regime
+    il_with_fees: Optional[float]       # None in unreachable-alpha regime
+    fee_income: float                   # Always 0.0 in v1
+    net_pnl: Optional[float]            # None in unreachable-alpha regime
+    real_apr: Optional[float]
+    diagnosis: str                      # "at_peg" | "net_positive" | "il_dominant" | "unreachable_alpha"
+    alpha: Optional[float]              # None in unreachable-alpha regime
+```
+
+**Internal calls:** `stableswappy.analytics.risk.StableswapImpLoss`, `lp.math_pool.dydx(0, 1, use_fee=False)`
+
+#### v1 Implementation Notes (2026-04-23)
+
+Sibling to `AnalyzePosition` for Stableswap 2-asset pools. Three diagnostic paths route per regime:
+
+**At-peg short-circuit.** Balanced pools (|dydx - 1.0| < 1e-12) skip the IL math and return zero-IL result directly. `StableswapPoolMath._dydx` returns exactly 1.0 at balance (confirmed via source read), so the tolerance is safe. Documented as a Key Internal Convention.
+
+**Off-peg reachable.** Alpha and IL computed via `StableswapImpLoss.calc_iloss(alpha)`. Standard code path.
+
+**Unreachable-alpha regime.** At high A, small depeg targets can correspond to pool compositions that violate the invariant (|ε| > 1). When `StableswapImpLoss` raises `DepegUnreachableError`, v1 catches it and returns a result with the analytical fields (`il_percentage`, `il_with_fees`, `net_pnl`, `alpha`) set to `None`. The V2-style fields (`current_value`, `hold_value`, `per_token_current`) stay populated for reference. `diagnosis` is `"unreachable_alpha"`. Same Optional-fields convention as AssessDepegRisk.
+
+**2-asset scope only.** Inherited from StableswapImpLoss. N>2 raises `ValueError`.
+
+**No fee income attribution in v1.** Same reason as AnalyzeBalancerPosition — no per-LP attribution in stableswappy's pool object. `fee_income = 0.0` always.
+
+**Numeraire: peg.** At peg, all tokens are 1:1, so `current_value = sum(per_token_current)` in peg units. Matches the stableswap family's natural framing for stablecoin pairs.
+
+**Explicit entry as list, not named scalars.** `entry_amounts: List[float]` in pool's insertion order. Supports future N-asset extension cleanly; at v1's N=2, the list has two entries. Differs from AnalyzePosition/AnalyzeBalancerPosition's `entry_x_amt`/`entry_y_amt` pair — the per-primitive input shape follows the protocol's natural math shape.
+
+See `python/prod/primitives/position/AnalyzeStableswapPosition.py` for the implementation.
+
+---
+
 ## Question → Primitive Mapping
 
 | Question | Primitives Used |
 |----------|----------------|
-| Q1.1 | `AnalyzePosition` |
-| Q1.2 | `AnalyzePosition` |
-| Q1.3 | `AnalyzePosition` |
-| Q1.4 | `AnalyzePosition` |
-| Q2.1 | `SimulatePriceMove` |
-| Q2.2 | `FindBreakEvenPrice` |
+| Q1.1 | `AnalyzePosition` (V2/V3), `AnalyzeBalancerPosition`, `AnalyzeStableswapPosition` |
+| Q1.2 | `AnalyzePosition` (V2/V3), `AnalyzeBalancerPosition`, `AnalyzeStableswapPosition` |
+| Q1.3 | `AnalyzePosition` (V2/V3), `AnalyzeBalancerPosition`, `AnalyzeStableswapPosition` |
+| Q1.4 | `AnalyzePosition` (V2/V3), `AnalyzeBalancerPosition`, `AnalyzeStableswapPosition` |
+| Q2.1 | `SimulatePriceMove` (V2/V3); Balancer/Stableswap extensions pending |
+| Q2.2 | `FindBreakEvenPrice` (V2/V3); Balancer/Stableswap extensions pending |
 | Q2.3 | `AssessDepegRisk` |
 | Q2.4 | `CheckTickRangeStatus` |
 | Q3.1 | `EvaluateTickRanges` |
@@ -897,7 +1070,7 @@ class PoolDiscoveryResult:
 | Q5.1 | `SimulatePriceMove` at multiple levels |
 | Q5.2 | `SimulatePriceMove` with scaled position |
 | Q5.3 | `FindBreakEvenTime` |
-| Q6.1 | `AggregatePortfolio` → multiple `AnalyzePosition` |
+| Q6.1 | `AggregatePortfolio` → cross-protocol: `AnalyzePosition` | `AnalyzeBalancerPosition` | `AnalyzeStableswapPosition` |
 | Q6.2 | `AggregatePortfolio` |
 | Q6.3 | `AggregatePortfolio` |
 | Q7.1 | `CheckPoolHealth` |
@@ -1009,11 +1182,15 @@ python/prod/
 |--------|-------|
 | **Section 1 questions** | 38 |
 | **Question categories** | 9 |
-| **Section 2 primitives** | 19 |
-| **Primitives shipped (1.2.0 working)** | 12 |
+| **Section 2 primitives (original spec)** | 19 |
+| **Primitives shipped from original spec** | 17 (missing: AssessLiquidityDepth, DiscoverPools) |
+| **Cross-protocol sibling primitives** | 3 (AnalyzeBalancerPosition, AnalyzeStableswapPosition, + AggregatePortfolio extension) |
+| **Total primitives shipped** | 20 |
 | **Primitive sub-packages** | 8 |
 | **New derivations required** | 4 (FindBreakEvenPrice, FindBreakEvenTime, max slippage inversion, tick traversal) |
-| **New derivations completed** | 2 (FindBreakEvenPrice, AssessDepegRisk stableswap-invariant expansion) |
+| **New derivations completed** | 3 (FindBreakEvenPrice V2/V3 closed form, FindBreakEvenTime fee-rate annualization, AssessDepegRisk stableswap-invariant expansion) |
+| **New derivations pending** | Tick traversal (AssessLiquidityDepth), FindBreakEven extensions for Balancer and Stableswap |
+| **Total test count** | 459 passing |
 | **Day-one launch blockers** | 0 |
 
 ---

@@ -445,6 +445,165 @@ sustainable.
 
 ---
 
+## 11. Cross-protocol extension pattern
+
+When a primitive is V2/V3-specific but the question it answers is
+protocol-independent (IL decomposition, PnL, break-even,
+slippage), the right shape is sibling primitives — one per AMM
+family — rather than a single primitive with branchy isinstance
+dispatch.
+
+The shipped pattern at the defipy level:
+
+- `AnalyzePosition` — V2/V3 (UniswapExchange), returns `PositionAnalysis`
+- `AnalyzeBalancerPosition` — Balancer 2-asset, returns `BalancerPositionAnalysis`
+- `AnalyzeStableswapPosition` — Stableswap 2-asset, returns `StableswapPositionAnalysis`
+
+This mirrors the sibling-repo IL helpers (`UniswapImpLoss` /
+`BalancerImpLoss` / `StableswapImpLoss`) one layer down. Each
+analyzer stays focused on its protocol's natural math and API
+shape; dispatch happens at the *composition* layer
+(AggregatePortfolio's isinstance-based router), which is the
+correct home for it.
+
+### 11a. When to use sibling primitives
+
+- The question is protocol-independent (the LP wants to know
+  their PnL / IL / break-even / slippage regardless of which AMM
+  they're in), but the math differs by protocol (V2/V3 CP-with-
+  fee, Balancer weighted, Stableswap invariant).
+- Each protocol's result has its own *natural fields* that don't
+  make sense for the others. Weighted pools carry `base_weight`;
+  stableswap pools carry `A` and `per_token_*` lists; V2/V3 carry
+  neither. Forcing one dataclass to hold all of them inflates the
+  API and makes V2/V3 callers reason about Optional fields they
+  never use.
+- The underlying math primitives in the sibling repos already
+  follow the same pattern (UniswapImpLoss, BalancerImpLoss,
+  StableswapImpLoss). Mirroring the structure one layer up
+  preserves the mapping between "where does the math live" and
+  "where does the primitive live."
+
+### 11b. What sibling primitives share
+
+- **`.apply()` entry point.** Stateless construction, computation
+  in `.apply()`, typed dataclass return — same contract as every
+  other primitive.
+- **Core scalar fields.** `current_value`, `hold_value`,
+  `il_percentage`, `il_with_fees`, `fee_income`, `net_pnl`,
+  `real_apr`, `diagnosis`, `alpha`. These are the fields
+  composition primitives extract uniformly (see §11d).
+- **Diagnosis convention.** Enum labels are the same language
+  (`net_positive`, `il_dominant`, `fee_compensated` when fee
+  attribution is available). Scope can narrow per protocol —
+  Balancer and Stableswap v1 only have two buckets because
+  fee_income = 0 — but the label *vocabulary* stays consistent
+  across the sibling set.
+- **Validation shape.** Type check the lp via isinstance, raise
+  `ValueError` with a message naming the primitive and pointing
+  the caller to the correct sibling. See
+  `AnalyzeBalancerPosition._validate_lp_type` for the template:
+  > `"AnalyzeBalancerPosition: lp must be a BalancerExchange;
+  >  got UniswapExchange. For V2/V3 pools use AnalyzePosition;
+  >  for stableswap use AnalyzeStableswapPosition."`
+
+### 11c. What sibling primitives differ on
+
+- **Result dataclass.** Split into distinct dataclasses
+  (`BalancerPositionAnalysis`, `StableswapPositionAnalysis`),
+  don't Optional-field a shared one. Protocol-specific fields
+  (`base_weight`, `A`, `token_names`, `per_token_init`,
+  `per_token_current`) live on the dataclass where they're
+  meaningful.
+- **Numeraire.** Each uses its protocol's natural numeraire. V2/V3
+  use token0. Balancer uses opp-token (inherited from
+  BalancerImpLoss's convention). Stableswap uses peg (tokens 1:1).
+  Don't force a common numeraire at the analyzer layer —
+  aggregators do their own normalization (see §11d).
+- **Entry-amount API.** V2/V3/Balancer take `entry_x_amt /
+  entry_y_amt` or `entry_base_amt / entry_opp_amt` (two named
+  scalars). Stableswap takes `entry_amounts: list[float]`
+  because N-asset extension lives in the list shape. Don't
+  force the 2-asset case to pretend it's a list if it isn't;
+  don't force the stableswap case to pretend it's two named
+  scalars.
+- **Unreachable/degenerate regimes.** Stableswap can be asked
+  questions with no physical solution (unreachable alpha at
+  high A + large dydx). The analyzer flags these with Optional
+  fields set to None, matching AssessDepegRisk's convention.
+  V2/V3 and Balancer don't have this regime — their Optional
+  fields stay mandatory.
+
+### 11d. Composition-layer dispatch
+
+Multi-input primitives (AggregatePortfolio, future
+CompareProtocols-shaped primitives) are the correct home for
+isinstance dispatch. AggregatePortfolio's `_detect_protocol` +
+`_analyze_uniswap` / `_analyze_balancer` / `_analyze_stableswap`
+router is the template.
+
+The rule: *stateless primitives are simpler when they know their
+protocol at authoring time; aggregators / comparators are the
+correct home for dispatch.* Pushing dispatch into each individual
+analyzer would require every test file to fork by protocol, every
+new primitive to re-solve the same problem, and each analyzer's
+docstring to hedge every claim with "if V2... if Balancer..."
+Don't do it.
+
+Extracting common scalars uniformly:
+
+```python
+# In the aggregator's per-position routing method:
+def _analyze_one(self, p, protocol):
+    if protocol in ("uniswap_v2", "uniswap_v3"):
+        return self._analyze_uniswap(p, protocol)
+    if protocol == "balancer":
+        return self._analyze_balancer(p, protocol)
+    if protocol == "stableswap":
+        return self._analyze_stableswap(p, protocol)
+    raise ValueError(...)
+
+# Each _analyze_X method returns a PositionSummary with the
+# common scalars extracted from its protocol-specific result:
+return PositionSummary(
+    name = display_name,
+    protocol = protocol,
+    net_pnl = analysis.net_pnl,
+    il_percentage = analysis.il_percentage,
+    fee_income = analysis.fee_income,
+    tokens = [<protocol-appropriate token list>],
+    analysis = analysis,  # full protocol-specific dataclass preserved
+)
+```
+
+`PositionSummary.analysis` is typed `Any` (not `PositionAnalysis`)
+to accept any of the three variants. Callers who need protocol-
+specific fields do isinstance-dispatch on `analysis`; callers who
+only need the scalar totals read the PositionSummary fields
+directly. Best-of-both.
+
+### 11e. Extending the pattern
+
+When writing the next cross-protocol sibling set (likely
+`SimulateBalancerPriceMove` / `SimulateStableswapPriceMove` /
+`CalculateBalancerSlippage` / `CalculateStableswapSlippage`):
+
+1. Check whether the underlying math primitive exists in the
+   sibling repo. If not, lift or write it there first — the
+   analyzer should compose, not duplicate.
+2. Match the core scalar fields (§11b) even if protocol-specific
+   extensions are needed. Consistency across the sibling set is
+   what makes composition-layer dispatch clean.
+3. Scope honestly to 2-asset for v1 if the underlying IL math is
+   2-asset (Balancer, Stableswap both are). N-asset extensions
+   require new derivations; defer and document.
+4. Return distinct dataclasses, not Optional-fielded shared ones.
+5. Wire the dispatch into any existing aggregator (currently only
+   AggregatePortfolio; future CompareProtocols-shaped primitives
+   will follow).
+
+---
+
 ## Completed primitives
 
 | Primitive | Category | Tests | Date |
@@ -461,3 +620,13 @@ sustainable.
 | DetectFeeAnomaly | pool_health/ | 20 | 2026-04-22 |
 | CompareFeeTiers | comparison/ | 21 | 2026-04-23 |
 | OptimalDepositSplit | optimization/ | 19 | 2026-04-23 |
+| FindBreakEvenTime | position/ | 20 | 2026-04-23 |
+| EvaluateTickRanges | optimization/ | 21 | 2026-04-23 |
+| EvaluateRebalance | optimization/ | 20 | 2026-04-23 |
+| DetectMEV | execution/ | 20 | 2026-04-23 |
+| CompareProtocols | comparison/ | 23 | 2026-04-23 |
+| AnalyzeBalancerPosition | position/ | 22 | 2026-04-23 |
+| AnalyzeStableswapPosition | position/ | 21 | 2026-04-23 |
+| AggregatePortfolio (cross-protocol extension) | portfolio/ | +13 | 2026-04-23 |
+
+**Test totals:** 459 passing across all primitives + fixture smoke tests.
