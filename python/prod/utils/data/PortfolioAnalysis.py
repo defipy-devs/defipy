@@ -17,7 +17,7 @@
 # limitations under the License
 
 from dataclasses import dataclass
-from typing import List
+from typing import Any, List
 
 from .PositionAnalysis import PositionAnalysis
 
@@ -26,101 +26,102 @@ from .PositionAnalysis import PositionAnalysis
 class PositionSummary:
     """Per-position summary for inclusion in PortfolioAnalysis.positions.
 
-    Compact view of one AnalyzePosition result plus the position's
+    Compact view of one Analyze*Position result plus the position's
     token pair, for ranking and filtering at the portfolio level.
-    The full AnalyzePosition is carried on .analysis so callers who
+    The full analyzer output is carried on .analysis so callers who
     got a portfolio-level verdict don't need to re-run per-position.
+
+    Cross-protocol: .analysis may be a PositionAnalysis (V2/V3),
+    BalancerPositionAnalysis, or StableswapPositionAnalysis. The
+    caller can dispatch on isinstance to access protocol-specific
+    fields; the scalars on PositionSummary (net_pnl, il_percentage,
+    fee_income) are extracted uniformly so portfolio-level ranking
+    doesn't need to care.
 
     Attributes
     ----------
     name : str
         Human-readable label for this position (from PortfolioPosition.name
-        or "{token0}/{token1}" default).
+        or a protocol-appropriate default).
+    protocol : str
+        One of "uniswap_v2" | "uniswap_v3" | "balancer" | "stableswap".
+        Surfaced so callers can dispatch without re-inspecting .lp.
     net_pnl : float
-        From PositionAnalysis.net_pnl. In the portfolio's common
-        token0 numeraire.
+        In the portfolio's common first-token numeraire. For
+        stableswap positions in the unreachable-alpha regime this
+        is 0.0 and the position is flagged in
+        PortfolioAnalysis.shared_exposure_warnings (or a dedicated
+        notes list in a future release).
     il_percentage : float
-        From PositionAnalysis.il_percentage. Fractional IL drag.
+        Fractional IL drag. Stableswap unreachable positions report 0.0.
     fee_income : float
-        From PositionAnalysis.fee_income. In numeraire units.
+        In numeraire units. Always 0.0 for Balancer/Stableswap in v1.
     tokens : List[str]
-        Two-element list [token0_name, token1_name] for this position's
-        pair. Used by shared-exposure detection at the portfolio level.
-    analysis : PositionAnalysis
-        Full AnalyzePosition output for this position.
+        Token symbols for this position in pool order. Used by
+        shared-exposure detection.
+    analysis : Any
+        Full analyzer output — one of PositionAnalysis,
+        BalancerPositionAnalysis, or StableswapPositionAnalysis.
+        Typed as Any because the union would bloat imports;
+        isinstance-dispatch at the call site.
     """
     name: str
+    protocol: str
     net_pnl: float
     il_percentage: float
     fee_income: float
     tokens: List[str]
-    analysis: PositionAnalysis
+    analysis: Any
 
 
 @dataclass
 class PortfolioAnalysis:
-    """Aggregate view of multiple LP positions sharing a common token0 numeraire.
+    """Aggregate view of multiple LP positions sharing a common first-token numeraire.
 
-    Produced by AggregatePortfolio. Chains AnalyzePosition across N
-    positions, sums the scalar metrics in a shared numeraire, ranks
-    by net_pnl, and flags token sets that appear in more than one
-    position (shared-exposure warnings).
+    Produced by AggregatePortfolio. Chains the appropriate
+    Analyze*Position primitive across N positions (protocol-dispatched
+    on lp isinstance), sums the scalar metrics in a shared numeraire,
+    ranks by net_pnl, and flags token sets that appear in more than
+    one position (shared-exposure warnings).
 
-    All scalar totals are expressed in the common token0 numeraire
+    All scalar totals are expressed in the common first-token numeraire
     enforced by the primitive. Mixed-numeraire portfolios raise at
     .apply() time rather than silently summing incompatible units.
+
+    Cross-protocol aggregation: portfolios may contain a mix of V2,
+    V3, Balancer, and Stableswap positions. Per-protocol numeraire
+    conventions are pre-rationalized at the primitive level so sums
+    are in comparable units (see AggregatePortfolio docstring for the
+    details). Stableswap positions in the unreachable-alpha regime
+    are skipped from totals and flagged in notes.
 
     Attributes
     ----------
     numeraire : str
-        Common token0 symbol shared by all positions. Every total
-        below is in these units.
+        Common first-token symbol shared by all positions. For V2/V3
+        this is lp.token0; for Balancer/Stableswap it's the first
+        token in the pool's insertion order. All positions must share
+        this symbol.
     total_value : float
         Sum of per-position current_value, in numeraire.
     total_hold_value : float
-        Sum of per-position hold_value, in numeraire. The counterfactual
-        portfolio value if every position had been held rather than LP'd.
+        Sum of per-position hold_value, in numeraire.
     total_fees : float
-        Sum of per-position fee_income, in numeraire.
+        Sum of per-position fee_income, in numeraire. For v1 this is
+        contributed to only by V2/V3 positions; Balancer and Stableswap
+        fee income is 0 pending per-LP attribution support.
     total_net_pnl : float
-        Sum of per-position net_pnl, in numeraire. Equivalently,
-        total_value - total_hold_value.
+        Sum of per-position net_pnl, in numeraire.
     positions : List[PositionSummary]
         One summary per input position, in the caller's original input
-        order. Ranking information is exposed separately via pnl_ranking
-        to avoid reordering the caller's data.
+        order.
     pnl_ranking : List[str]
         Position names ordered by net_pnl ascending (worst PnL first),
-        tiebroken on il_percentage ascending (worst IL first on ties).
-        Information, not verdict — the caller decides what to do with
-        the ordering.
+        tiebroken on il_percentage ascending.
     shared_exposure_warnings : List[str]
-        Human-readable notes for tokens that appear in more than one
-        position (e.g., "ETH appears in 2 positions: ETH/USDC, ETH/DAI").
-        Not statistical correlation — just token overlap, which is the
-        risk concept LPs actually reason about. Empty list when no
-        token is shared across multiple positions.
-
-    Notes
-    -----
-    Why no exit_priority. Ranking positions by PnL is useful; calling
-    that ranking "exit priority" overclaims — the primitive can't know
-    whether a bad PnL position should be exited (it might be at its
-    worst and due to mean-revert) or held (exit cost might exceed hold
-    cost). Matches DetectRugSignals' "signal surfacer, not verdict
-    generator" stance.
-
-    Why numeraire is required uniform. Summing a BTC-pair position's
-    value (in BTC) and an ETH-pair position's value (in ETH) is
-    nonsensical without a cross-rate DeFiPy doesn't carry. v1 rejects
-    mixed-numeraire portfolios with a helpful error rather than silently
-    producing a meaningless total. A future release can add
-    multi-numeraire support; the current return shape leaves room.
-
-    Why positions stay in input order. Reordering the caller's data by
-    PnL is surprising — the caller knows which position is which by
-    index. Exposing the ranking via pnl_ranking (names, not indices)
-    gives both views without either rewriting the other.
+        Human-readable notes for tokens appearing in 2+ positions. Also
+        carries unreachable-alpha notices for stableswap positions that
+        couldn't be fully aggregated.
     """
     numeraire: str
     total_value: float

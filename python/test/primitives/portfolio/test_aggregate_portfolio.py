@@ -289,5 +289,222 @@ class TestAggregatePortfolioV3(unittest.TestCase):
         self.assertIsInstance(result.positions[0].analysis, PositionAnalysis)
 
 
+# ─── Cross-protocol aggregation suite ────────────────────────────────────────────
+#
+# Portfolios that mix V2/V3/Balancer/Stableswap positions. Exercises the
+# isinstance-dispatch layer added when Balancer and Stableswap analyzers
+# landed. The baseline expectation: a cross-protocol portfolio where
+# each position is at its own entry state should aggregate to
+# total_net_pnl ≈ 0, just like the V2-only baseline above.
+#
+# Numeraire: all fixture pools use ETH (V2/V3/Balancer) or USDC
+# (Stableswap) as first token. Cross-protocol tests that include
+# Stableswap stick to USDC-first fixtures for AggregatePortfolio
+# compatibility.
+
+
+class TestAggregatePortfolioCrossProtocol(unittest.TestCase):
+
+    @pytest.fixture(autouse = True)
+    def _bind_setups(self, v2_setup, v3_setup, balancer_setup):
+        self.v2 = v2_setup
+        self.v3 = v3_setup
+        self.bal = balancer_setup
+
+    def _v2_position(self):
+        return PortfolioPosition(
+            lp = self.v2.lp, lp_init_amt = self.v2.lp_init_amt,
+            entry_x_amt = self.v2.entry_x_amt,
+            entry_y_amt = self.v2.entry_y_amt,
+            name = "v2_ethdai",
+        )
+
+    def _v3_position(self):
+        return PortfolioPosition(
+            lp = self.v3.lp, lp_init_amt = self.v3.lp_init_amt,
+            entry_x_amt = self.v3.entry_x_amt,
+            entry_y_amt = self.v3.entry_y_amt,
+            lwr_tick = self.v3.lwr_tick, upr_tick = self.v3.upr_tick,
+            name = "v3_ethdai",
+        )
+
+    def _balancer_position(self):
+        return PortfolioPosition(
+            lp = self.bal.lp, lp_init_amt = self.bal.lp_init_amt,
+            entry_x_amt = self.bal.entry_base_amt,
+            entry_y_amt = self.bal.entry_opp_amt,
+            name = "bal_ethdai",
+        )
+
+    # ─── V2 + Balancer mix ───────────────────────────────────────
+
+    def test_v2_plus_balancer_aggregates(self):
+        positions = [self._v2_position(), self._balancer_position()]
+        result = AggregatePortfolio().apply(positions)
+        self.assertIsInstance(result, PortfolioAnalysis)
+        self.assertEqual(result.numeraire, "ETH")
+        self.assertEqual(len(result.positions), 2)
+
+    def test_v2_plus_balancer_position_protocols_labeled(self):
+        positions = [self._v2_position(), self._balancer_position()]
+        result = AggregatePortfolio().apply(positions)
+        protos = {s.name: s.protocol for s in result.positions}
+        self.assertEqual(protos["v2_ethdai"], "uniswap_v2")
+        self.assertEqual(protos["bal_ethdai"], "balancer")
+
+    def test_v2_plus_balancer_at_entry_net_pnl_near_zero(self):
+        positions = [self._v2_position(), self._balancer_position()]
+        result = AggregatePortfolio().apply(positions)
+        # Both at entry → combined PnL should be within float noise of 0.
+        # Looser tolerance than V2-only because Balancer's fee-free
+        # spot derivation can leave a tiny residual.
+        self.assertAlmostEqual(result.total_net_pnl, 0.0, places = 2)
+
+    # ─── V2 + V3 + Balancer mix ─────────────────────────────────
+
+    def test_three_protocol_aggregation(self):
+        positions = [
+            self._v2_position(),
+            self._v3_position(),
+            self._balancer_position(),
+        ]
+        result = AggregatePortfolio().apply(positions)
+        self.assertEqual(len(result.positions), 3)
+        self.assertEqual(result.numeraire, "ETH")
+        protos = sorted(s.protocol for s in result.positions)
+        self.assertEqual(
+            protos, ["balancer", "uniswap_v2", "uniswap_v3"],
+        )
+
+    def test_three_protocol_shared_eth_exposure_flagged(self):
+        positions = [
+            self._v2_position(),
+            self._v3_position(),
+            self._balancer_position(),
+        ]
+        result = AggregatePortfolio().apply(positions)
+        eth_warnings = [
+            w for w in result.shared_exposure_warnings
+            if w.startswith("ETH")
+        ]
+        self.assertEqual(len(eth_warnings), 1)
+        # All three position names should appear in the ETH warning.
+        self.assertIn("v2_ethdai", eth_warnings[0])
+        self.assertIn("v3_ethdai", eth_warnings[0])
+        self.assertIn("bal_ethdai", eth_warnings[0])
+
+    # ─── Validation ──────────────────────────────────────────────
+
+    def test_mixed_first_token_across_protocols_raises(self):
+        # V2 ETH/DAI + a Balancer pool whose first token is NOT ETH
+        # should raise. Build a small inline DAI/ETH-ordered
+        # Balancer pool to prove the point.
+        from balancerpy.erc import ERC20 as BERC20
+        from balancerpy.vault import BalancerVault
+        from balancerpy.cwpt.factory import BalancerFactory
+        from balancerpy.utils.data import BalancerExchangeData
+        from balancerpy.process.join import Join as BJoin
+
+        dai = BERC20("DAI", "0xdai_first")
+        dai.deposit(USER, 10000.0)
+        eth = BERC20("ETH", "0xeth_second")
+        eth.deposit(USER, 10.0)
+        vault = BalancerVault()
+        vault.add_token(dai, 0.5)
+        vault.add_token(eth, 0.5)
+        factory = BalancerFactory("DAI-first bal", "0xd1")
+        exch = BalancerExchangeData(
+            vault = vault, symbol = "BPT", address = "0xd2",
+        )
+        lp_bal = factory.deploy(exch)
+        BJoin().apply(lp_bal, USER, 100.0)
+
+        bad_position = PortfolioPosition(
+            lp = lp_bal, lp_init_amt = 100.0,
+            entry_x_amt = 10000.0, entry_y_amt = 10.0,
+            name = "dai_first_bal",
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            AggregatePortfolio().apply([
+                self._v2_position(), bad_position,
+            ])
+        msg = str(ctx.exception)
+        self.assertIn("ETH", msg)
+        self.assertIn("DAI", msg)
+
+
+# ─── Stableswap aggregation (USDC-numeraire, separate class) ─────────────
+#
+# Stableswap's first token is USDC in our fixture. V2/V3 ETH/DAI pools
+# won't aggregate with it (different first-token symbol). Use a separate
+# V2 USDC/DAI pool for mixed aggregation.
+
+
+def _build_usdc_dai_v2():
+    """V2 USDC/DAI pool — for mixing with the stableswap fixture."""
+    usdc = ERC20("USDC", "0xusdc_v2")
+    dai = ERC20("DAI", "0xdai_v2")
+    factory = UniswapFactory("USDC-DAI V2", "0xud1")
+    exch = UniswapExchangeData(
+        tkn0 = usdc, tkn1 = dai, symbol = "UDLP", address = "0xud2",
+    )
+    lp = factory.deploy(exch)
+    lp.add_liquidity(USER, 50000.0, 50000.0, 50000.0, 50000.0)
+    return lp, usdc, dai
+
+
+class TestAggregatePortfolioStableswapMix(unittest.TestCase):
+
+    @pytest.fixture(autouse = True)
+    def _bind_setup(self, stableswap_setup):
+        self.ss = stableswap_setup
+
+    def _stableswap_position(self, name = "ss_usdc_dai"):
+        return PortfolioPosition(
+            lp = self.ss.lp, lp_init_amt = self.ss.lp_init_amt,
+            entry_amounts = self.ss.entry_amounts,
+            name = name,
+        )
+
+    def test_stableswap_alone_aggregates(self):
+        result = AggregatePortfolio().apply([self._stableswap_position()])
+        self.assertIsInstance(result, PortfolioAnalysis)
+        self.assertEqual(result.numeraire, "USDC")
+        self.assertEqual(result.positions[0].protocol, "stableswap")
+
+    def test_stableswap_at_peg_contributes_zero_pnl(self):
+        result = AggregatePortfolio().apply([self._stableswap_position()])
+        self.assertAlmostEqual(result.total_net_pnl, 0.0, places = 4)
+
+    def test_stableswap_plus_v2_usdc_aggregate(self):
+        lp_v2, usdc, dai = _build_usdc_dai_v2()
+        lp_init = lp_v2.convert_to_human(lp_v2.liquidity_providers[USER])
+        v2_pos = PortfolioPosition(
+            lp = lp_v2, lp_init_amt = lp_init,
+            entry_x_amt = 50000.0, entry_y_amt = 50000.0,
+            name = "v2_usdc_dai",
+        )
+        result = AggregatePortfolio().apply([
+            v2_pos, self._stableswap_position(),
+        ])
+        self.assertEqual(result.numeraire, "USDC")
+        self.assertEqual(len(result.positions), 2)
+        protos = {s.name: s.protocol for s in result.positions}
+        self.assertEqual(protos["v2_usdc_dai"], "uniswap_v2")
+        self.assertEqual(protos["ss_usdc_dai"], "stableswap")
+
+    def test_stableswap_missing_entry_amounts_raises(self):
+        # A stableswap position with entry_x_amt/entry_y_amt set but
+        # entry_amounts None gets rejected at aggregation time.
+        bad_position = PortfolioPosition(
+            lp = self.ss.lp, lp_init_amt = self.ss.lp_init_amt,
+            entry_x_amt = 100000.0, entry_y_amt = 100000.0,
+        )
+        with self.assertRaises(ValueError) as ctx:
+            AggregatePortfolio().apply([bad_position])
+        self.assertIn("entry_amounts", str(ctx.exception))
+
+
 if __name__ == '__main__':
     unittest.main()

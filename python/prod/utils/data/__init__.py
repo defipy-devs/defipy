@@ -21,3 +21,5 @@ from .RebalanceCostReport import RebalanceCostReport
 from .TickRangeCandidate import TickRangeCandidate
 from .TickRangeEvaluation import TickRangeEvaluation, RangeMetrics
 from .ProtocolComparison import ProtocolComparison, ProtocolMetrics
+from .BalancerPositionAnalysis import BalancerPositionAnalysis
+from .StableswapPositionAnalysis import StableswapPositionAnalysis
