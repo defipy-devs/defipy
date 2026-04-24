@@ -210,6 +210,16 @@ To construct a Uniswap V3 pool directly (outside MockProvider's canonical recipe
     Real Reserves:   ETH = 999.0039930189599, TKN = 10010.0
     Gross Liquidity: 3162.277660168379  
 
+## 🧪 Tests
+
+DeFiPy ships 629 tests across primitives, tools, twin, packaging, and the MCP server dispatch layer. Run the full suite:
+
+    pytest python/test/ -v
+
+Run just the primitive suite (504 tests, no MCP or twin dependencies):
+
+    pytest python/test/primitives/ -v
+
 ## License
 Licensed under the Apache License, Version 2.0.  
 See [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for details.  
