@@ -4,7 +4,12 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      version='2.0.0',
+      # 2.1.0a1: pre-release alpha for v2.1 State Twin Completion.
+      # Phase 1 (LiveProvider V2) is the first piece. Version stays in
+      # the 2.1.0aN series until Phase 3 (fork-and-evaluate demo)
+      # lands; 2.1.0 final tags simultaneously with the Phase 3
+      # commit per STATE_TWIN_COMPLETION_PLAN.md.
+      version='2.1.0a1',
       description='Python SDK for Agentic DeFi',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -69,17 +74,24 @@ setup(name='DeFiPy',
           'stableswappy >= 1.1.0',
       ],
       extras_require={
+          # [chain]: canonical name for chain-reading optional deps.
+          # Pulled in by `pip install defipy[chain]` for users who want
+          # LiveProvider (v2.1+ chain reads). web3scout supplies
+          # ABILoad + FetchToken + ConnectW3, used internally by the
+          # twin's _rpc.py module per D1 of STATE_TWIN_PHASE_1_EXPANDED.md.
+          # web3 declared explicitly to make intent visible (it's a
+          # transitive dep via web3scout).
+          'chain': ['web3scout >= 0.2.0', 'web3 >= 6.0, < 7.0'],
           # [book]: for readers of 'Hands-On AMMs with Python'.
           #   - web3scout powers the chapter 9 agent examples.
           #   - web3 is needed by ExecuteScript and UniswapScriptHelper,
           #     which some chapters use against a local Anvil node.
-          # web3 is also a transitive dep via web3scout, but declaring it
-          # explicitly keeps intent visible and guards against any future
-          # change in web3scout's own dep surface.
+          # Same packages as [chain] — kept separate because the intent
+          # differs (textbook chapters vs production live-state reads).
           'book': ['web3scout >= 0.2.0', 'web3 >= 6.0, < 7.0'],
           # [anvil]: for users running ExecuteScript or UniswapScriptHelper
           # against a local Anvil node WITHOUT needing web3scout's chain
-          # event monitoring stack. Lighter install than [book].
+          # event monitoring stack. Lighter install than [book] / [chain].
           'anvil': ['web3 >= 6.0, < 7.0'],
           # [mcp]: for the MCP server demo at python/mcp/defipy_mcp_server.py.
           # Only needed by users connecting DeFiPy to Claude Desktop or

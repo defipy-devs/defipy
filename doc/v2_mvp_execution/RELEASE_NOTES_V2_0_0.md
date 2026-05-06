@@ -45,3 +45,6 @@ should be rewritten with launch-narrative framing rather than release-notes
 framing. The substrate-vs-agent story, the MCP explainer, and the "most DeFi
 tools wrap APIs, DeFiPy ships the math" positioning all deserve more room than
 a release note allows.
+
+
+This works with the introduction of a new concept which I call the 'State Twin' ... this is where the DeFi Agentic Analyst can chew through dozens of analytical scenarios on the fly (in its memory offchain) before landing on an execution path ... no one is doing this ...that is, using offchain state twins for DeFi decision-making

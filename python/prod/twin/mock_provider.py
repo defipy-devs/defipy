@@ -81,7 +81,11 @@ class MockProvider(StateTwinProvider):
         ),
     }
 
-    def snapshot(self, pool_id: str) -> PoolSnapshot:
+    def snapshot(self, pool_id: str, **kwargs) -> PoolSnapshot:
+        # **kwargs absorbed silently for cross-provider portability per
+        # C1 of STATE_TWIN_PHASE_1_EXPANDED.md. Callers writing code
+        # generic over providers can pass `block_number=N` and have
+        # MockProvider ignore it; LiveProvider would honor it.
         if pool_id not in self.RECIPES:
             raise ValueError(
                 "MockProvider: unknown recipe {!r}. Available: {}"

@@ -34,6 +34,23 @@ class PoolSnapshot(ABC):
     Concrete subclasses carry protocol-specific fields. Each subclass
     sets `protocol` in __post_init__ so the discriminator can't be
     forged by the caller.
+
+    Note on `pool_id` semantics — this field is provider-dependent:
+
+      - For MockProvider snapshots, `pool_id` is the recipe name
+        (e.g. "eth_dai_v2"). Builder uses it as a synthetic-address
+        component, e.g. "0xtwin_eth_dai_v2_ETH".
+
+      - For LiveProvider snapshots, `pool_id` is the on-chain pool
+        address as supplied by the caller (with or without "0x"
+        prefix, with or without checksum casing). Builder uses it
+        the same way; the synthesized internal token addresses
+        ("0xtwin_<addr>_<symbol>") are non-functional identifiers,
+        not real chain addresses.
+
+    Downstream consumers should not parse `pool_id` expecting a
+    specific format. Phase 2 will add `block_number`, `timestamp`,
+    `chain_id` fields for snapshots that need them.
     """
     pool_id: str
     protocol: str = ""
@@ -41,6 +58,15 @@ class PoolSnapshot(ABC):
 
 @dataclass(kw_only=True)
 class V2PoolSnapshot(PoolSnapshot):
+    """Uniswap V2 pool state.
+
+    `reserve0` and `reserve1` are decimal-adjusted floats in
+    whole-token units, NOT raw uint112 wei values. LiveProvider does
+    the conversion (raw_reserve / 10**decimals) before constructing
+    the snapshot; MockProvider produces decimal floats directly.
+    `StateTwinBuilder._build_v2` passes these straight to
+    `lp.add_liquidity()`, which expects decimal-adjusted amounts.
+    """
     token0_name: str
     token1_name: str
     reserve0: float

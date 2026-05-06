@@ -25,18 +25,29 @@ class StateTwinProvider(ABC):
     """Source of pool snapshots for State Twin construction.
 
     Implementations decide where snapshots come from — synthetic
-    recipes (MockProvider), live chain reads (LiveProvider, v2.1),
+    recipes (MockProvider), live chain reads (LiveProvider, v2.1+),
     cached blocks, fork state, etc. The contract is protocol-agnostic:
     a provider returns a PoolSnapshot; StateTwinBuilder turns that
     into a concrete exchange object.
+
+    The signature widened in v2.1 from `snapshot(pool_id)` to
+    `snapshot(pool_id, **kwargs)`. MockProvider treats `pool_id` as a
+    recipe name and ignores kwargs; LiveProvider treats `pool_id` as a
+    "<protocol>:<address>" string and uses kwargs (e.g. `block_number`)
+    to refine the read. Existing v2.0 single-arg callers continue to
+    work unchanged.
     """
 
     @abstractmethod
-    def snapshot(self, pool_id: str) -> PoolSnapshot:
+    def snapshot(self, pool_id: str, **kwargs) -> PoolSnapshot:
         """Return a PoolSnapshot for the given pool identifier.
 
-        pool_id semantics are provider-specific: MockProvider treats
-        it as a recipe name; LiveProvider (v2.1) will treat it as a
-        chain address or chain:address string.
+        pool_id semantics are provider-specific. Refer to the concrete
+        provider's docstring for its accepted formats.
+
+        kwargs are provider-specific options (e.g. block_number for
+        LiveProvider). Providers that don't recognize a given kwarg
+        should silently ignore it rather than raise — keeps callers
+        portable across providers.
         """
         ...

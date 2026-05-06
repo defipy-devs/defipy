@@ -134,3 +134,15 @@ def test_v3_recipe_check_pool_health():
     assert health.version == "V3"
     assert health.reserve0 == 1000.0
     assert health.reserve1 == 100000.0
+
+
+def test_snapshot_silently_absorbs_kwargs():
+    """MockProvider.snapshot ignores arbitrary kwargs for cross-provider
+    portability. Per C1 of STATE_TWIN_PHASE_1_EXPANDED.md, callers writing
+    code generic over providers can pass `block_number=N` and have
+    MockProvider ignore it; LiveProvider would honor it."""
+    snap = MockProvider().snapshot(
+        "eth_dai_v2", block_number=18_000_000, chain_id=1, foo="bar",
+    )
+    assert snap.protocol == "uniswap_v2"
+    assert snap.reserve0 == 1000.0
