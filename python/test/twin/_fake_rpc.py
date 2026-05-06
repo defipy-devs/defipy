@@ -686,14 +686,16 @@ def canonical_weth_usdc_token_specs() -> list:
     ]
 
 
-# ─── Canonical V3 pool fixture: USDC/WETH 0.3% mainnet ─────────────────────
+# ─── Canonical V3 pool fixture: USDC/WETH 0.05% mainnet ────────────────────
 #
-# Per STATE_TWIN_PHASE_2_EXPANDED.md: USDC/WETH V3 3000bps is the
-# canonical Phase 2 smoke pool — long-running, deep liquidity, mixed
-# decimals. Same address constants as the V2 fixture (token0 = USDC
-# 6dec, token1 = WETH 18dec).
+# Per STATE_TWIN_PHASE_2_EXPANDED.md: USDC/WETH V3 is the canonical
+# Phase 2 smoke pool — long-running, deep liquidity, mixed decimals.
+# The brief listed this pool as "3000bps" but the address actually
+# resolves to the 0.05% (500bps) tier on mainnet. Constants renamed
+# for accuracy. Same token addresses as the V2 fixture
+# (token0 = USDC 6dec, token1 = WETH 18dec).
 
-USDC_WETH_V3_3000_POOL = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"
+USDC_WETH_V3_POOL = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"
 
 
 def canonical_usdc_weth_v3_spec(
@@ -713,7 +715,7 @@ def canonical_usdc_weth_v3_spec(
     assertions reuse the same constants.
     """
     return V3PoolSpec(
-        address = USDC_WETH_V3_3000_POOL,
+        address = USDC_WETH_V3_POOL,
         token0_address = USDC_ADDRESS,
         token1_address = WETH_ADDRESS,
         sqrt_price_x96 = sqrt_price_x96,

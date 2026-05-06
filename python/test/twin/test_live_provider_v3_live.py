@@ -30,9 +30,11 @@ reads at most one Multicall3.aggregate3 round trip per snapshot.
 Tests are written defensively — assert sane bounds rather than exact
 values, since reserves change every block.
 
-Canonical pool: USDC/WETH V3 0.3% fee tier
-(0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640) per the Phase 2 EXPANDED
-brief. Long-running pool with deep liquidity, mixed decimals.
+Canonical pool: USDC/WETH V3 0.05% fee tier
+(0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640). The Phase 2 EXPANDED
+brief named this address as the 0.3% pool but it actually resolves to
+the 0.05% (500bps / 10 tickSpacing) tier on mainnet. Either way it's
+deep, long-running, and mixed-decimal — fits the smoke role.
 """
 
 import os
@@ -43,8 +45,8 @@ from defipy.twin import LiveProvider, V3PoolSnapshot, StateTwinBuilder
 from defipy.primitives.pool_health import CheckPoolHealth
 
 
-USDC_WETH_V3_3000 = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"
-USDC_WETH_V3_3000_POOL_ID = "uniswap_v3:" + USDC_WETH_V3_3000
+USDC_WETH_V3 = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"
+USDC_WETH_V3_POOL_ID = "uniswap_v3:" + USDC_WETH_V3
 
 
 _RPC_ENV_VAR = "DEFIPY_LIVE_RPC"
@@ -64,17 +66,18 @@ def _get_rpc_or_skip():
 @pytest.mark.live_rpc
 def test_live_v3_usdc_weth_snapshot_constructs():
     rpc = _get_rpc_or_skip()
-    snap = LiveProvider(rpc).snapshot(USDC_WETH_V3_3000_POOL_ID)
+    snap = LiveProvider(rpc).snapshot(USDC_WETH_V3_POOL_ID)
     assert isinstance(snap, V3PoolSnapshot)
     assert snap.protocol == "uniswap_v3"
-    assert snap.fee == 3000
-    assert snap.tick_spacing == 60
+    # Pool at 0x88e6... is the 0.05% (500bps / 10 tickSpacing) tier.
+    assert snap.fee == 500
+    assert snap.tick_spacing == 10
 
 
 @pytest.mark.live_rpc
 def test_live_v3_usdc_weth_token_symbols():
     rpc = _get_rpc_or_skip()
-    snap = LiveProvider(rpc).snapshot(USDC_WETH_V3_3000_POOL_ID)
+    snap = LiveProvider(rpc).snapshot(USDC_WETH_V3_POOL_ID)
     assert snap.token0_name == "USDC"
     assert snap.token1_name == "WETH"
 
@@ -89,7 +92,7 @@ def test_live_v3_reserves_positive_and_scaled():
     reserve quote.
     """
     rpc = _get_rpc_or_skip()
-    snap = LiveProvider(rpc).snapshot(USDC_WETH_V3_3000_POOL_ID)
+    snap = LiveProvider(rpc).snapshot(USDC_WETH_V3_POOL_ID)
     assert snap.reserve0 > 0
     assert snap.reserve1 > 0
     # Without decimal scaling, raw reserves would be > 1e15 for any
@@ -102,7 +105,7 @@ def test_live_v3_reserves_positive_and_scaled():
 def test_live_v3_snapshot_runs_through_check_pool_health():
     """End-to-end: real chain read → builder → primitive."""
     rpc = _get_rpc_or_skip()
-    snap = LiveProvider(rpc).snapshot(USDC_WETH_V3_3000_POOL_ID)
+    snap = LiveProvider(rpc).snapshot(USDC_WETH_V3_POOL_ID)
     lp = StateTwinBuilder().build(snap)
     health = CheckPoolHealth().apply(lp)
     assert health.version == "V3"
@@ -119,10 +122,10 @@ def test_live_v3_snapshot_at_specific_block():
     rpc = _get_rpc_or_skip()
     block = 19_500_000
     s1 = LiveProvider(rpc).snapshot(
-        USDC_WETH_V3_3000_POOL_ID, block_number=block,
+        USDC_WETH_V3_POOL_ID, block_number=block,
     )
     s2 = LiveProvider(rpc).snapshot(
-        USDC_WETH_V3_3000_POOL_ID, block_number=block,
+        USDC_WETH_V3_POOL_ID, block_number=block,
     )
     assert s1.reserve0 == s2.reserve0
     assert s1.reserve1 == s2.reserve1

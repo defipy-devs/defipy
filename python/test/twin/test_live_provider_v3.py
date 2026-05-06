@@ -48,12 +48,12 @@ from twin._fake_rpc import (
     build_fake_client,
     canonical_usdc_weth_v3_spec,
     canonical_usdc_weth_v3_token_specs,
-    USDC_WETH_V3_3000_POOL,
+    USDC_WETH_V3_POOL,
     USDC_ADDRESS, WETH_ADDRESS,
 )
 
 
-def _v3_pool_id(addr: str = USDC_WETH_V3_3000_POOL) -> str:
+def _v3_pool_id(addr: str = USDC_WETH_V3_POOL) -> str:
     return "uniswap_v3:{}".format(addr)
 
 
