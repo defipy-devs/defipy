@@ -49,11 +49,19 @@ class PoolSnapshot(ABC):
         not real chain addresses.
 
     Downstream consumers should not parse `pool_id` expecting a
-    specific format. Phase 2 will add `block_number`, `timestamp`,
-    `chain_id` fields for snapshots that need them.
+    specific format.
+
+    Chain-context fields (block_number, timestamp, chain_id) are
+    Optional[int] = None per C5 of STATE_TWIN_PHASE_2_EXPANDED.md.
+    LiveProvider populates them from on-chain reads; MockProvider
+    leaves them None to honestly signal "synthetic, not chain state."
+    Consumers that need chain context check for None and branch.
     """
     pool_id: str
     protocol: str = ""
+    block_number: Optional[int] = None
+    timestamp: Optional[int] = None
+    chain_id: Optional[int] = None
 
 
 @dataclass(kw_only=True)

@@ -136,6 +136,20 @@ def test_v3_recipe_check_pool_health():
     assert health.reserve1 == 100000.0
 
 
+def test_recipe_snapshots_have_none_chain_context():
+    """MockProvider snapshots have None for block_number, timestamp,
+    chain_id. These fields are populated only by chain-reading providers
+    (LiveProvider). MockProvider stays None to honestly signal
+    'this is synthetic, not a chain read.' Per C5 of
+    STATE_TWIN_PHASE_2_EXPANDED.md."""
+    p = MockProvider()
+    for recipe in EXPECTED_RECIPES:
+        snap = p.snapshot(recipe)
+        assert snap.block_number is None, recipe
+        assert snap.timestamp is None, recipe
+        assert snap.chain_id is None, recipe
+
+
 def test_snapshot_silently_absorbs_kwargs():
     """MockProvider.snapshot ignores arbitrary kwargs for cross-provider
     portability. Per C1 of STATE_TWIN_PHASE_1_EXPANDED.md, callers writing

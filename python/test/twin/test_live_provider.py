@@ -18,21 +18,14 @@
 
 """Module-level invariants for LiveProvider.
 
-These four tests cover always-true properties of the LiveProvider
-class regardless of which protocol is implemented. The set is
-intentionally tiny — V2-implementation coverage lives in
-test_live_provider_v2.py; live-RPC verification lives in
-test_live_provider_v2_live.py.
+These tests cover always-true properties of the LiveProvider class
+regardless of which protocol is implemented. The set is intentionally
+tiny — V2-implementation coverage lives in test_live_provider_v2.py,
+V3 in test_live_provider_v3.py, and live-RPC verification in the
+*_live.py companions.
 
-Two tests preserved from v2.0:
-  - rpc_url stored on construction
-  - module doesn't pull web3 into its namespace
-
-Two tests rewritten from v2.0 (where they asserted snapshot() always
-raises NotImplementedError, which is no longer true after Phase 1):
-  - V3 protocol raises NotImplementedError pointing at Phase 2
-  - Balancer/Stableswap protocols raise NotImplementedError pointing
-    at v2.2+
+After Phase 2 (V3 LiveProvider lands), the only protocols that still
+raise NotImplementedError are balancer + stableswap (v2.2+).
 """
 
 import pytest
@@ -67,17 +60,7 @@ def test_live_provider_module_does_not_import_web3():
     assert "web3scout" not in dir(lp_module)
 
 
-# ─── Phase-boundary error messages (rewritten for v2.1 Phase 1) ────────────
-
-
-def test_v3_pool_id_raises_not_implemented_phase_2():
-    """V3 LiveProvider lands in v2.1 Phase 2."""
-    with pytest.raises(NotImplementedError) as excinfo:
-        LiveProvider("http://x").snapshot("uniswap_v3:0xabc")
-    msg = str(excinfo.value)
-    assert "v2.1" in msg
-    assert "Phase 2" in msg
-    assert "MockProvider" in msg
+# ─── Phase-boundary error messages ─────────────────────────────────────────
 
 
 def test_balancer_and_stableswap_pool_ids_raise_not_implemented_v22():

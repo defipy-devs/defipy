@@ -4,12 +4,12 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      # 2.1.0a1: pre-release alpha for v2.1 State Twin Completion.
-      # Phase 1 (LiveProvider V2) is the first piece. Version stays in
-      # the 2.1.0aN series until Phase 3 (fork-and-evaluate demo)
-      # lands; 2.1.0 final tags simultaneously with the Phase 3
-      # commit per STATE_TWIN_COMPLETION_PLAN.md.
-      version='2.1.0a1',
+      # 2.1.0a2: second alpha for v2.1 State Twin Completion. Phase 2
+      # ships V3 LiveProvider + Multicall3 batching + PoolSnapshot
+      # enrichment. Version stays in the 2.1.0aN series until Phase 3
+      # (fork-and-evaluate demo) lands; 2.1.0 final tags simultaneously
+      # with the Phase 3 commit per STATE_TWIN_COMPLETION_PLAN.md.
+      version='2.1.0a2',
       description='Python SDK for Agentic DeFi',
       long_description=long_description,
       long_description_content_type="text/markdown",

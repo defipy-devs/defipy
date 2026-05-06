@@ -146,3 +146,16 @@ def test_live_v2_snapshot_at_specific_block():
     assert s1.reserve1 == s2.reserve1
     assert s1.token0_name == s2.token0_name
     assert s1.token1_name == s2.token1_name
+
+
+@pytest.mark.live_rpc
+def test_live_v2_snapshot_populates_chain_context():
+    """V2 LiveProvider's Phase 2 retrofit populates block_number,
+    timestamp, and chain_id on the snapshot."""
+    rpc = _get_rpc_or_skip()
+    snap = LiveProvider(rpc).snapshot(WETH_USDC_V2_POOL_ID)
+    assert snap.block_number is not None
+    assert snap.block_number > 19_000_000   # post-2024
+    assert snap.timestamp is not None
+    assert snap.timestamp > 1_700_000_000   # post-Nov 2023
+    assert snap.chain_id == 1                # Ethereum mainnet

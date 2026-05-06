@@ -381,21 +381,6 @@ def test_snapshot_rpc_failure_propagates():
         LiveProvider._with_client(client).snapshot("uniswap_v2:0xPOOL")
 
 
-# Test 15 — Phase boundary
-def test_snapshot_v3_protocol_not_yet_supported():
-    """V3 pool_id raises NotImplementedError naming Phase 2.
-
-    Without this test, a future drift could silently start handling
-    V3 with V2 logic. The error message also surfaces the workaround
-    (use MockProvider) for users who need V3 simulation today.
-    """
-    with pytest.raises(NotImplementedError) as excinfo:
-        LiveProvider("http://x").snapshot("uniswap_v3:0xpool")
-    msg = str(excinfo.value)
-    assert "Phase 2" in msg
-    assert "MockProvider" in msg
-
-
 # ─── Construction and config (2 tests) ─────────────────────────────────────
 
 
@@ -476,3 +461,21 @@ def test_live_twin_runs_through_check_pool_health():
     assert health.version == "V2"
     assert health.reserve0 == pytest.approx(snap.reserve0)
     assert health.reserve1 == pytest.approx(snap.reserve1)
+
+
+# Phase 2 retrofit — V2 LiveProvider populates enrichment fields
+def test_v2_snapshot_populates_chain_context():
+    """After Phase 2's V2 retrofit, V2 LiveProvider snapshots carry
+    populated `block_number`, `timestamp`, and `chain_id`. Per C5 of
+    STATE_TWIN_PHASE_2_EXPANDED.md."""
+    client = build_fake_client(
+        pool=canonical_weth_usdc_v2_spec(),
+        tokens=canonical_weth_usdc_token_specs(),
+        latest_block=20_000_000,
+        chain_id=1,
+        block_timestamp=1_715_000_000,
+    )
+    snap = LiveProvider._with_client(client).snapshot(_provider_pool_id())
+    assert snap.block_number == 20_000_000
+    assert snap.timestamp == 1_715_000_000
+    assert snap.chain_id == 1

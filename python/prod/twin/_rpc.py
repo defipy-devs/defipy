@@ -30,10 +30,13 @@ Phase 1 strategy (per STATE_TWIN_PHASE_1_EXPANDED.md D1):
     `chain_id()`) so a `FakeRpcClient` in tests can mimic it without
     network access.
 
-Phase 2 will extend this module with a multicall helper. The class
-shape stays the same; multicall lives behind a `multicall(reads)`
-method or similar.
+Phase 2 extends this module with Multicall3 batching for V3 reads
+(see MULTICALL3_ADDRESS, multicall_aggregate3, load_v3_pool_contract
+below). V2 LiveProvider stays sequential — one extra
+`eth_getBlockByNumber` for the timestamp retrofit, no multicall.
 """
+
+from typing import Optional
 
 
 # RPC client interface (informal protocol):
@@ -83,6 +86,11 @@ class RpcClient:
     def __init__(self, connector):
         self._connector = connector
         self._w3 = connector.get_w3()
+        # C9: chain_id cached lazily on first read. Avoids re-querying
+        # the endpoint on every .snapshot() call. Reset across RpcClient
+        # instances (per-call construction in production keeps the
+        # provider stateless).
+        self._chain_id: Optional[int] = None
 
     def get_w3(self):
         """Return the underlying web3.Web3 instance.
@@ -98,9 +106,22 @@ class RpcClient:
         return int(self._w3.eth.block_number)
 
     def chain_id(self) -> int:
-        """Chain id of the endpoint. Cached on the underlying web3
-        instance after first read; safe to call repeatedly."""
-        return int(self._w3.eth.chain_id)
+        """Chain id of the endpoint. Cached on first access per C9.
+        Safe to call repeatedly — the chain_id of a connected endpoint
+        is a constant for the lifetime of the connection."""
+        if self._chain_id is None:
+            self._chain_id = int(self._w3.eth.chain_id)
+        return self._chain_id
+
+    def block_timestamp(self, block_number: int) -> int:
+        """Block header timestamp for the given block_number.
+
+        Used by V2 LiveProvider's enrichment retrofit (Phase 2). V3
+        reads timestamp inside the multicall via Multicall3's
+        `getCurrentBlockTimestamp()`, so this helper is V2-only in
+        Phase 2; one extra round trip per V2 snapshot.
+        """
+        return int(self._w3.eth.get_block(block_number).timestamp)
 
     def is_connected(self) -> bool:
         """True if the underlying ConnectW3 reports a live connection.
@@ -110,6 +131,127 @@ class RpcClient:
         problem with more context.
         """
         return self._connector.is_connect()
+
+
+# ─── Multicall3 (Phase 2 D6/D14) ───────────────────────────────────────────
+
+
+# Canonical Multicall3 address — same on every major EVM chain per
+# https://www.multicall3.com. Hardcoded per D6: if a target chain
+# doesn't have Multicall3, the eth_call to this address fails with a
+# clear error and that's a v2.2 problem (multi-chain support work).
+MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11"
+
+
+# Minimal Multicall3 ABI — only `aggregate3` (the Call3 struct
+# accepting allowFailure per call) and `getCurrentBlockTimestamp`
+# (folded into the same batch per C8 to save a round trip).
+_MULTICALL3_ABI = [
+    {
+        "inputs": [{
+            "components": [
+                {"internalType": "address", "name": "target", "type": "address"},
+                {"internalType": "bool", "name": "allowFailure", "type": "bool"},
+                {"internalType": "bytes", "name": "callData", "type": "bytes"},
+            ],
+            "internalType": "struct Multicall3.Call3[]",
+            "name": "calls",
+            "type": "tuple[]",
+        }],
+        "name": "aggregate3",
+        "outputs": [{
+            "components": [
+                {"internalType": "bool", "name": "success", "type": "bool"},
+                {"internalType": "bytes", "name": "returnData", "type": "bytes"},
+            ],
+            "internalType": "struct Multicall3.Result[]",
+            "name": "returnData",
+            "type": "tuple[]",
+        }],
+        "stateMutability": "payable",
+        "type": "function",
+    },
+    {
+        "inputs": [],
+        "name": "getCurrentBlockTimestamp",
+        "outputs": [
+            {"internalType": "uint256", "name": "timestamp", "type": "uint256"},
+        ],
+        "stateMutability": "view",
+        "type": "function",
+    },
+]
+
+
+def _fn_selector(fn_signature: str) -> bytes:
+    """4-byte function selector for a no-arg view function signature
+    like `"slot0()"` or `"token0()"`. We only batch no-arg reads in
+    Phase 2; introducing args would require encoding calldata too."""
+    from eth_utils import function_signature_to_4byte_selector
+    return function_signature_to_4byte_selector(fn_signature)
+
+
+def multicall_aggregate3(w3, calls, block_number: int):
+    """Batch a set of no-arg view calls through Multicall3.aggregate3.
+
+    Parameters
+    ----------
+    w3 : Web3
+        web3 client. The Multicall3 contract proxy is built fresh on
+        every invocation — cost is negligible.
+    calls : list[tuple[str, str, list[str]]]
+        Each entry is `(target_address, fn_signature, decode_types)`.
+        `fn_signature` is the canonical `"name(args)"` form used to
+        compute the selector (e.g. `"slot0()"`). `decode_types` is a
+        list of eth_abi type strings (e.g. `["uint160", "int24", ...]`)
+        describing the return shape.
+    block_number : int
+        Pin every sub-call to this block per R1 (block consistency).
+
+    Returns
+    -------
+    list
+        One decoded value per call. For single-return calls, the bare
+        decoded value. For multi-return (e.g. slot0's 7 fields), a
+        tuple. The order matches the input `calls` list.
+
+    Raises
+    ------
+    RuntimeError
+        If any sub-call reports `success=False`. With D7
+        (`allowFailure=false` on every call), the whole multicall
+        reverts before this branch — but defended anyway in case a
+        future caller passes allowFailure=True.
+    """
+    from eth_abi import decode
+    multicall = w3.eth.contract(
+        address = w3.to_checksum_address(MULTICALL3_ADDRESS),
+        abi = _MULTICALL3_ABI,
+    )
+    # D7: allowFailure=False on every call. Snapshot fails loudly.
+    encoded = [
+        (
+            w3.to_checksum_address(target),
+            False,
+            _fn_selector(fn_sig),
+        )
+        for target, fn_sig, _ in calls
+    ]
+    results = multicall.functions.aggregate3(encoded).call(
+        block_identifier = block_number,
+    )
+    decoded_results = []
+    for (success, return_data), (_, fn_sig, decode_types) in zip(results, calls):
+        if not success:
+            raise RuntimeError(
+                "multicall_aggregate3: sub-call {!r} reverted "
+                "(allowFailure was off but success=False — should not happen)"
+                .format(fn_sig)
+            )
+        out = decode(decode_types, return_data)
+        # Convention: bare scalar for single-return, tuple for multi.
+        decoded_results.append(out[0] if len(decode_types) == 1 else out)
+    return decoded_results
 
 
 # ─── V2 helpers ────────────────────────────────────────────────────────────
@@ -126,6 +268,20 @@ def load_v2_pair_contract(w3, address: str):
     from web3scout.abi.abi_load import ABILoad
     from web3scout.enums.platforms_enum import PlatformsEnum
     abi = ABILoad(PlatformsEnum.AGNOSTIC, "UniswapV2Pair")
+    return abi.apply(w3, address)
+
+
+def load_v3_pool_contract(w3, address: str):
+    """Load a Uniswap V3 pool contract proxy via web3scout's ABI bundle.
+
+    Symmetric with `load_v2_pair_contract`. Phase 2's V3 LiveProvider
+    doesn't strictly need the proxy (reads go through Multicall3 with
+    raw selectors), but keeping the loader makes the V2/V3 surface
+    parallel and gives future V3-specific direct calls a clean path.
+    """
+    from web3scout.abi.abi_load import ABILoad
+    from web3scout.enums.platforms_enum import PlatformsEnum
+    abi = ABILoad(PlatformsEnum.AGNOSTIC, "UniswapV3Pool")
     return abi.apply(w3, address)
 
 

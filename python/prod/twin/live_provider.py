@@ -49,6 +49,7 @@ from defipy.twin.provider import StateTwinProvider
 from defipy.twin.snapshot import (
     PoolSnapshot,
     V2PoolSnapshot,
+    V3PoolSnapshot,
 )
 
 
@@ -180,10 +181,11 @@ class LiveProvider(StateTwinProvider):
         if protocol == _PROTO_V2:
             return self._snapshot_v2(address, block_number)
         if protocol == _PROTO_V3:
-            raise NotImplementedError(
-                "LiveProvider Uniswap V3 reads land in v2.1 Phase 2. "
-                "For now, use MockProvider.snapshot('eth_dai_v3') for "
-                "a synthetic V3 twin."
+            return self._snapshot_v3(
+                address,
+                block_number,
+                kwargs.get("lwr_tick", None),
+                kwargs.get("upr_tick", None),
             )
         if protocol == _PROTO_BALANCER:
             raise NotImplementedError(
@@ -306,10 +308,133 @@ class LiveProvider(StateTwinProvider):
         reserve0 = _rpc.amt_to_decimal(tkn0, int(reserves[0]))
         reserve1 = _rpc.amt_to_decimal(tkn1, int(reserves[1]))
 
+        # Phase 2 C5 enrichment: populate chain context. V2 keeps
+        # sequential reads — one extra eth_getBlockByNumber for
+        # timestamp. Multicall optimization is V3-only.
+        timestamp = client.block_timestamp(block_number)
+        chain_id = client.chain_id()
+
         return V2PoolSnapshot(
             pool_id = pool_address,
             token0_name = tkn0.token_name,
             token1_name = tkn1.token_name,
             reserve0 = reserve0,
             reserve1 = reserve1,
+            block_number = block_number,
+            timestamp = timestamp,
+            chain_id = chain_id,
+        )
+
+    # ─── V3 snapshot ───────────────────────────────────────────────────────
+
+    def _snapshot_v3(
+        self,
+        pool_address: str,
+        block_number: Optional[int],
+        lwr_tick: Optional[int],
+        upr_tick: Optional[int],
+    ) -> V3PoolSnapshot:
+        from defipy.twin import _rpc
+
+        client = self._get_client()
+        w3 = client.get_w3()
+
+        # R1 — block consistency. Same discipline as V2.
+        if block_number is None:
+            block_number = client.block_number()
+
+        addr = w3.to_checksum_address(pool_address)
+        chain_id = client.chain_id()
+
+        # All V3-specific reads + getCurrentBlockTimestamp folded into
+        # one Multicall3.aggregate3 round trip per D6/C8. Token
+        # metadata (symbol/decimals) is read separately via FetchToken
+        # — its API doesn't accept block_identifier or fold cleanly into
+        # the multicall format.
+        calls = [
+            (addr, "token0()", ["address"]),
+            (addr, "token1()", ["address"]),
+            (addr, "slot0()",
+                ["uint160", "int24", "uint16", "uint16", "uint16", "uint8", "bool"]),
+            (addr, "liquidity()", ["uint128"]),
+            (addr, "fee()", ["uint24"]),
+            (addr, "tickSpacing()", ["int24"]),
+            (_rpc.MULTICALL3_ADDRESS, "getCurrentBlockTimestamp()", ["uint256"]),
+        ]
+        results = _rpc.multicall_aggregate3(w3, calls, block_number)
+        token0_addr = results[0]
+        token1_addr = results[1]
+        slot0_tuple = results[2]
+        sqrt_price_x96 = int(slot0_tuple[0])
+        current_tick = int(slot0_tuple[1])
+        liquidity = int(results[3])
+        fee = int(results[4])
+        tick_spacing = int(results[5])
+        timestamp = int(results[6])
+
+        # Tick range default per D13 — full range from getMinTick /
+        # getMaxTick at the pool's tick_spacing. Caller can override
+        # either bound via kwargs.
+        from uniswappy.utils.tools.v3 import UniV3Utils, TickMath, SqrtPriceMath
+        if lwr_tick is None:
+            lwr_tick = UniV3Utils.getMinTick(tick_spacing)
+        if upr_tick is None:
+            upr_tick = UniV3Utils.getMaxTick(tick_spacing)
+        if lwr_tick >= upr_tick:
+            raise ValueError(
+                "LiveProvider V3: lwr_tick ({}) must be < upr_tick ({})"
+                .format(lwr_tick, upr_tick)
+            )
+
+        # C4 + R14 — derive (amount0, amount1) for a position spanning
+        # [lwr_tick, upr_tick] with active liquidity L at sqrt_current.
+        # Three regimes:
+        #   sqrt_current < sqrt_lower  → all in token0 (single-sided)
+        #   sqrt_current > sqrt_upper  → all in token1 (single-sided)
+        #   in-range                   → both nonzero
+        sqrt_lower = int(TickMath.getSqrtRatioAtTick(lwr_tick))
+        sqrt_upper = int(TickMath.getSqrtRatioAtTick(upr_tick))
+        if sqrt_price_x96 <= sqrt_lower:
+            amount0_raw = int(SqrtPriceMath.getAmount0Delta(
+                sqrt_lower, sqrt_upper, liquidity, False,
+            ))
+            amount1_raw = 0
+        elif sqrt_price_x96 >= sqrt_upper:
+            amount0_raw = 0
+            amount1_raw = int(SqrtPriceMath.getAmount1Delta(
+                sqrt_lower, sqrt_upper, liquidity, False,
+            ))
+        else:
+            amount0_raw = int(SqrtPriceMath.getAmount0Delta(
+                sqrt_price_x96, sqrt_upper, liquidity, False,
+            ))
+            amount1_raw = int(SqrtPriceMath.getAmount1Delta(
+                sqrt_lower, sqrt_price_x96, liquidity, False,
+            ))
+
+        # Token metadata reads happen at "latest" — same caveat as V2
+        # path, FetchToken doesn't accept block_identifier.
+        # eth_abi decodes addresses as lowercase; normalize to checksum
+        # form before handing to FetchToken since real web3 rejects
+        # non-checksummed mixed-case input.
+        tkn0 = _rpc.fetch_token(w3, w3.to_checksum_address(token0_addr))
+        tkn1 = _rpc.fetch_token(w3, w3.to_checksum_address(token1_addr))
+
+        # D15 — decimal-adjusted floats matching V2 contract.
+        reserve0 = amount0_raw / (10 ** tkn0.token_decimal)
+        reserve1 = amount1_raw / (10 ** tkn1.token_decimal)
+
+        return V3PoolSnapshot(
+            pool_id = pool_address,
+            token0_name = tkn0.token_name,
+            token1_name = tkn1.token_name,
+            reserve0 = reserve0,
+            reserve1 = reserve1,
+            fee = fee,
+            tick_spacing = tick_spacing,
+            lwr_tick = lwr_tick,
+            upr_tick = upr_tick,
+            block_number = block_number,
+            timestamp = timestamp,
+            chain_id = chain_id,
         )

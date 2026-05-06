@@ -173,3 +173,51 @@ def test_stableswap_snapshot_rejects_non_2_asset():
             reserves = [1, 1, 1],
         )
     assert "2" in str(excinfo.value)
+
+
+# ─── Chain-context enrichment defaults (Phase 2 C5) ─────────────────────────
+
+
+def test_v2_snapshot_chain_context_defaults_to_none():
+    s = V2PoolSnapshot(
+        pool_id = "p", token0_name = "A", token1_name = "B",
+        reserve0 = 1, reserve1 = 1,
+    )
+    assert s.block_number is None
+    assert s.timestamp is None
+    assert s.chain_id is None
+
+
+def test_v3_snapshot_chain_context_defaults_to_none():
+    s = V3PoolSnapshot(
+        pool_id = "p", token0_name = "A", token1_name = "B",
+        reserve0 = 1, reserve1 = 1,
+    )
+    assert s.block_number is None
+    assert s.timestamp is None
+    assert s.chain_id is None
+
+
+def test_balancer_and_stableswap_chain_context_default_to_none():
+    bal = BalancerPoolSnapshot(
+        pool_id = "p", token0_name = "A", token1_name = "B",
+        reserve0 = 1, reserve1 = 1,
+    )
+    ss = StableswapPoolSnapshot(
+        pool_id = "p", token_names = ["A", "B"], reserves = [1, 1],
+    )
+    for snap in (bal, ss):
+        assert snap.block_number is None
+        assert snap.timestamp is None
+        assert snap.chain_id is None
+
+
+def test_snapshot_chain_context_can_be_populated():
+    s = V2PoolSnapshot(
+        pool_id = "p", token0_name = "A", token1_name = "B",
+        reserve0 = 1, reserve1 = 1,
+        block_number = 19_500_000, timestamp = 1_710_000_000, chain_id = 1,
+    )
+    assert s.block_number == 19_500_000
+    assert s.timestamp == 1_710_000_000
+    assert s.chain_id == 1
