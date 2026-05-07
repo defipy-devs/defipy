@@ -4,7 +4,7 @@
 **Umbrella plan:** `STATE_TWIN_COMPLETION_PLAN.md`
 **Predecessor:** Phase 2 (`STATE_TWIN_PHASE_2.md`) — V2+V3 LiveProvider shipped, `PoolSnapshot` enriched, test infrastructure generalized
 **Estimated dedicated time:** ~1-2 weeks
-**Acceptance gate:** Self-contained Python script (or notebook) builds a twin via LiveProvider against a real V3 pool, forks it N ways under price scenarios, runs primitives against each fork, and produces an interpretable scenario distribution with a recommended path. Demo lives in `python/examples/` and is referenced from ReadTheDocs as a worked example.
+**Acceptance gate:** Self-contained Python script builds a twin via LiveProvider against a real V3 pool, forks it N ways under price scenarios, runs primitives against each fork, and produces an interpretable scenario distribution with a recommended path. Demo lives in `python/examples/` and is referenced from a defipy-org page as a worked example.
 
 ---
 
@@ -20,7 +20,7 @@ The acceptance criterion is "the script runs and produces an interpretable resul
 
 ## Scope — what's in
 
-- A self-contained demo script — `python/examples/state_twin_fork_evaluate.py` — or an equivalent Jupyter notebook in `doc/notebooks/state_twin_fork_evaluate.ipynb`
+- A self-contained demo script — `python/examples/state_twin_fork_evaluate.py`. Notebook variant deferred per D14.
 - The demo:
   1. Builds a twin via `LiveProvider` against a real V3 pool at a recent block (USDC/WETH 3000bps recommended — same pool used in phase 2's smoke test)
   2. Forks the twin into N copies (N = 20-50, configurable) under different price scenarios — uniform spread, log-normal sample, or hand-specified scenarios
@@ -29,9 +29,9 @@ The acceptance criterion is "the script runs and produces an interpretable resul
   5. Produces a recommendation — e.g., "stay in current range" / "rebalance to range X" / "exit position" — with a confidence/score basis
   6. Outputs a clean human-readable summary (text or simple plot)
 - Whatever small library utilities surface naturally during demo work — most likely `PoolSnapshot.clone()` or a fork helper, possibly nothing if Python's `copy.deepcopy` handles snapshots cleanly
-- ReadTheDocs page in `doc/source/state-twin/fork-evaluate.md` (or adjacent) walking through the pattern with code excerpts from the demo
-- A short paragraph in the main ReadTheDocs landing page pointing to the demo as the canonical State Twin worked example
-- README update mentioning the demo and how to run it
+- defipy-org docs page at `src/content/docs/fork-evaluate.mdx` (slug: `/fork-evaluate/`) walking through the pattern with code excerpts from the demo. Lives under the existing State Twin sub-group in the sidebar (`astro.config.mjs` update required to add it).
+- A short pointer on the home page (`src/content/docs/index.mdx` on defipy-org) and/or the State Twin Concept page, linking to the fork-evaluate page as the canonical worked example
+- README update mentioning the demo and how to run it (links to `https://defipy.org/fork-evaluate/`, not RTD)
 
 ## Scope — what's out
 
@@ -48,12 +48,12 @@ The acceptance criterion is "the script runs and produces an interpretable resul
 
 ## Deliverables
 
-Files to create or modify:
+Files to create or modify in `defipy` repo:
 
 ```
 python/examples/state_twin_fork_evaluate.py    # NEW — the demo script
-                                                # (alternatively: a notebook
-                                                # at doc/notebooks/...)
+                                                # (script only; notebook
+                                                # deferred per D14)
 
 python/prod/twin/snapshot.py                   # MODIFY (likely) — add
                                                 # PoolSnapshot.clone() or
@@ -66,24 +66,40 @@ python/test/twin/test_snapshot_clone.py        # NEW (conditional on the
                                                 # semantics if a clone helper
                                                 # is added
 
-doc/source/state-twin/fork-evaluate.md         # NEW — ReadTheDocs page
-                                                # walking through the
-                                                # fork-and-evaluate pattern
-
-doc/source/index.md                            # MODIFY — landing-page
-                                                # pointer to the demo
-
 README.md                                       # MODIFY — short mention
                                                 # of the demo in the
                                                 # "What's new in v2.1" or
-                                                # "Examples" section
+                                                # "Examples" section, with
+                                                # link to defipy.org/fork-evaluate/
 
 CHANGELOG.md                                    # MODIFY — v2.1 entry
                                                 # mentioning fork-evaluate
                                                 # demo
 ```
 
-The demo file format (script vs. notebook) is a decision point — see D14.
+Files to create or modify on `defipy-org`:
+
+```
+src/content/docs/fork-evaluate.mdx              # NEW — page walking through
+                                                # the fork-and-evaluate
+                                                # pattern with code excerpts
+                                                # from the demo script
+
+astro.config.mjs                                # MODIFY — add fork-evaluate
+                                                # entry under the existing
+                                                # State Twin sub-group in
+                                                # the sidebar IA
+
+src/content/docs/index.mdx                      # MODIFY (small) — pointer
+                                                # to /fork-evaluate/ as the
+                                                # canonical v2.1 worked example
+
+src/content/docs/twin-concept.mdx               # OPTIONAL — closing-section
+                                                # pointer to /fork-evaluate/
+                                                # as "this is what fork-and-
+                                                # evaluate looks like in
+                                                # practice"
+```
 
 ---
 
@@ -99,13 +115,13 @@ Phase 3 ships when all of these pass:
 
 4. **The "no one is doing this" claim has a worked example.** The demo demonstrably runs N scenarios in memory against an offchain twin built from real chain state, with single-digit-second wall-clock time on a typical laptop. This is what makes the multi-scenario claim defensible.
 
-5. **Demo is referenced from docs.** The fork-and-evaluate pattern has a dedicated ReadTheDocs page; the main docs landing page links to it; the README mentions it as a v2.1 example.
+5. **Demo is referenced from docs.** The fork-and-evaluate pattern has a dedicated defipy-org page (`/fork-evaluate/`); the home page or State Twin Concept page links to it; the README mentions it as a v2.1 example.
 
 6. **No new substrate dependencies.** The demo uses LiveProvider, MockProvider (optionally for offline mode), the existing primitives, and standard library tools. No new top-level dependencies in `install_requires`. If matplotlib is used for output, it's optional and the demo runs without it (text fallback).
 
 7. **Existing test suite unaffected.** All v2.0 + phase 1 + phase 2 tests still pass. Any new tests (e.g., for `PoolSnapshot.clone()` if added) pass.
 
-8. **Docs page captures the pattern, not just the demo.** The fork-and-evaluate ReadTheDocs page explains what the pattern is, why it's useful, and points to the demo as the existence proof. A reader who wants to apply the pattern to their own pool / their own scenarios can follow the page without reading the demo line-by-line.
+8. **Docs page captures the pattern, not just the demo.** The fork-and-evaluate page on defipy-org explains what the pattern is, why it's useful, and points to the demo as the existence proof. A reader who wants to apply the pattern to their own pool / their own scenarios can follow the page without reading the demo line-by-line.
 
 ---
 
@@ -119,9 +135,13 @@ Phase 3 ships when all of these pass:
 
 ### D14 — Script vs. notebook format
 
-**Options:** Pure Python script in `python/examples/` | Jupyter notebook in `doc/notebooks/` | Both
+**Decision (locked):** **Script only. Notebook deferred.**
 
-**Recommendation:** **Script primary, notebook secondary if time permits.** A `.py` file in `python/examples/` is unambiguously runnable, easy to test in CI later, and doesn't require notebook infrastructure to render. If a notebook adds value (e.g., for the docs page), build it second from the script as a thin wrapper. Don't ship two divergent versions; the script is canonical.
+A `.py` file in `python/examples/state_twin_fork_evaluate.py` is the canonical and only demo artifact for v2.1.0. No `doc/notebooks/state_twin_fork_evaluate.ipynb` ships in this phase.
+
+**Why:** Per R20 — two formats means two implementations to keep in sync, and the divergence cost grows fast. Script-only avoids the failure mode entirely. The script is unambiguously runnable, easy to test in CI later, and doesn't require notebook infrastructure to render. If a notebook adds value later (e.g., for a tutorial blog post or a workshop), it gets built post-v2.1.0 from the script as a thin wrapper, not maintained alongside it.
+
+**Implication for the docs page:** the defipy-org `fork-evaluate.mdx` page embeds code snippets *from* the script (copied or referenced) rather than rendering a notebook. This keeps the script as the single source of truth.
 
 ### D15 — Forking mechanism
 
@@ -141,9 +161,11 @@ A short comment in the demo pointing to where a consumer would plug in their own
 
 ### D17 — Recommendation logic
 
-**Question:** What does "recommended path" mean given that the demo runs N price scenarios on a single position?
+**Decision (locked):** **70% threshold.** If ≥ 70% of price scenarios produce IL worse than -5% (i.e., `il_percentage < -0.05`), the demo's recommendation is `"rebalance"`; otherwise `"hold"`.
 
-**Recommendation:** **Recommend "hold" vs. "rebalance" based on whether the active range covers ≥ X% of scenarios in the IL-positive zone.** Or simpler: report the IL distribution and let the demo's narrative be "if 80% of scenarios show IL > 5%, consider rebalancing." The recommendation is illustrative, not prescriptive — consumers calibrate to their own thresholds.
+**Why:** The demo needs *one* concrete threshold so the output reads cleanly ("42 of 50 scenarios show IL worse than -5% → recommendation: rebalance"). 70% is illustrative-but-defensible — a mild majority signal, not so strict (>90%) that the demo always says hold, not so loose (>50%) that it triggers on coin-flip dispersion. The number is a demo choice, not a substrate prescription.
+
+**Output framing:** the script prints the threshold it used and the count of scenarios that breached it, so a reader understands the recommendation isn't magic — it's a one-line rule applied to a transparent distribution. A short comment in the script points to where a consumer would plug in their own threshold or scoring function. The recommendation is illustrative, not prescriptive — consumers calibrate to their own thresholds.
 
 The point is to demonstrate that *a recommendation is producible from the distribution*, not to prescribe THE recommendation logic.
 
@@ -195,8 +217,8 @@ In order:
 3. Run the demo script against LiveProvider (canonical mode): `python python/examples/state_twin_fork_evaluate.py` with a working RPC URL. Output is interpretable, no errors.
 4. Wall-clock time for N=50 scenario evaluation against a live snapshot is under ~10 seconds on a typical laptop (excluding the initial chain-read time, which depends on RPC latency).
 5. Verify fork independence: instrument the demo to print scenario inputs and outputs, confirm no two scenarios with different inputs produce identical outputs (would indicate cross-fork contamination).
-6. Read the ReadTheDocs page draft. A reader unfamiliar with the work understands: what fork-and-evaluate is, why it's interesting, where the demo lives, how to adapt it to their own use case.
-7. Verify README and main docs landing page link to the demo and the pattern page.
+6. Read the defipy-org `fork-evaluate.mdx` page draft. A reader unfamiliar with the work understands: what fork-and-evaluate is, why it's interesting, where the demo lives, how to adapt it to their own use case.
+7. Verify README links to `defipy.org/fork-evaluate/`; the home page on defipy-org points at `/fork-evaluate/`; `npm run build` on defipy-org is clean.
 8. Verify the CHANGELOG v2.1 entry mentions the demo as one of the v2.1 deliverables.
 9. Commit. Suggested message:
 

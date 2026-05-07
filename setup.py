@@ -4,14 +4,13 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      # 2.1.0a3: third alpha for v2.1 State Twin Completion. Phase 3a
-      # ships substrate-completeness fixes — LiveProvider.get_w3() for
-      # consumer-side signing and PoolHealth field additions for V3
-      # ergonomics (fee_pips, tvl_in_token1, tick_current). Version
-      # stays in the 2.1.0aN series until Phase 3b (fork-and-evaluate
-      # demo) lands; 2.1.0 final tags simultaneously with the Phase 3b
-      # commit per STATE_TWIN_COMPLETION_PLAN.md.
-      version='2.1.0a3',
+      # 2.1.0: State Twin Completion cycle complete. V2+V3 LiveProvider,
+      # Multicall3 batching, PoolSnapshot enrichment, get_w3() escape
+      # hatch, PoolHealth ergonomics for V3, fork-and-evaluate worked
+      # example. Phases 1-3 of STATE_TWIN_COMPLETION_PLAN.md all
+      # shipped. Substrate is feature-complete for v2.1; v2.2 work is
+      # demand-driven.
+      version='2.1.0',
       description='Python SDK for Agentic DeFi',
       long_description=long_description,
       long_description_content_type="text/markdown",
