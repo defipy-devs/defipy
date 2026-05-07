@@ -198,34 +198,27 @@ Topics include:
 
 The fastest way to see DeFiPy at work — pull a real Uniswap V2 pool's state from mainnet and run a primitive against it. Requires the `[chain]` install extra.
 
-    from defipy import AnalyzePosition
+    from defipy import CheckPoolHealth
     from defipy.twin import LiveProvider, StateTwinBuilder
-
-    # Pull live state from a real Uniswap V2 pool — WETH/USDC mainnet
-    provider = LiveProvider("https://eth-mainnet.g.alchemy.com/v2/<key>")
+    
+    # Pull live state from a real Uniswap V3 pool — USDC/WETH 500bps mainnet
+    provider = LiveProvider("https://mainnet.infura.io/v3/d2d6569915ec402b82c9379d033f8b9b")
     snapshot = provider.snapshot(
-        "uniswap_v2:0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
+        "uniswap_v3:0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640"
     )
     lp = StateTwinBuilder().build(snapshot)
     lp.summary()
-
+    
     # Snapshot carries chain context — block_number, timestamp, chain_id
-    print(f"Block:   {snapshot.block_number}")
-    print(f"Reserves: {snapshot.token0_name}={snapshot.reserve0:.2f}, "
-          f"{snapshot.token1_name}={snapshot.reserve1:.2f}")
-
+    print(f"Block: {snapshot.block_number}")
+    
     # Run any primitive against the live twin — same call shape as MockProvider
-    result = AnalyzePosition().apply(
-        lp,
-        lp_init_amt=1.0,
-        entry_x_amt=1000,
-        entry_y_amt=3_000_000,
-    )
-
-    print(f"Diagnosis:   {result.diagnosis}")
-    print(f"Net PnL:     {result.net_pnl:.4f}")
-    print(f"IL %:        {result.il_percentage:.4f}")
-    print(f"Current val: {result.current_value:.4f}")
+    health = CheckPoolHealth().apply(lp)
+    print(f"Fee tier:        {health.fee_pips} pips")
+    print(f"TVL (USDC):      {health.tvl_in_token0:,.2f}")
+    print(f"TVL (WETH):      {health.tvl_in_token1:,.4f}")
+    print(f"Current tick:    {health.tick_current}")
+    print(f"Spot price:      {health.spot_price:.6f} WETH/USDC")
 
 The same shape works for V3 — swap `uniswap_v2:` for `uniswap_v3:` and the appropriate pool address (e.g. `0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640` for USDC/WETH 500bps). V3 snapshots default to full-range ticks; pass `lwr_tick=N, upr_tick=N` to override. See the [LiveProvider docs](https://defipy.org/live-provider/) for block pinning, the V3 tick-range surface, and the active-liquidity-only caveat.
 
