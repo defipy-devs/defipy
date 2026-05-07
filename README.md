@@ -45,7 +45,9 @@ Claude reads the tool descriptions, picks `CheckPoolHealth`, calls it against a 
 
 ## 🧩 What DeFiPy offers
 
-21 primitives across 7 categories. Each answers a specific LP question with exact math and returns a typed dataclass result:
+**7 [Core primitives](https://defipy.org/core-primitives/)** for cross-protocol pool execution — `Join`, `Swap`, `AddLiquidity`, `RemoveLiquidity`, `SwapDeposit`, `WithdrawSwap`, `LPQuote`. State-mutating operations that work across Uniswap V2/V3, Balancer, and Stableswap through a single abstract interface.
+
+**21 [Agentic primitives](https://defipy.org/agentic-primitives/)** across 7 categories. Each answers a specific LP question with exact math and returns a typed dataclass result:
 
 * **Position analysis** — "Why is my position losing money? What if price moves X%?" PnL decomposition (IL, fees, net result) and price-move scenarios across Uniswap V2/V3, Balancer, and Stableswap. Includes break-even pricing and time-to-breakeven analysis.
 * **Pool health** — "Is this pool healthy? Any rug signals?" TVL, LP concentration, activity, threshold-based rug detection, fee-anomaly checks (V2/V3).
