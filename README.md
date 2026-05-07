@@ -78,12 +78,14 @@ DeFiPy requires **Python 3.10 or later**. Install via pip:
 
 The core install is the pure analytics engine — AMM math, primitives, State Twin, and all 21 typed analytics functions. It has **zero web3 dependencies and zero LLM dependencies**. No chain reads, no RPC calls, no MCP. Chain reads come from [Web3Scout](https://github.com/defipy-devs/web3scout) (via the `[chain]` or `[book]` extras); MCP tool serving comes from the `[mcp]` extra. All optional.
 
+> **Note for zsh users (default on macOS):** wrap any install spec with extras in single quotes — `pip install 'defipy[agentic]'` — so zsh doesn't try to glob the brackets. Without the quotes, you'll see `zsh: no matches found`. Bash users can use either form.
+
 ### Chain install (LiveProvider — v2.1+)
 
 To use `LiveProvider` for on-chain pool snapshots, install the `[chain]` extra:
 
 ```
-> pip install defipy[chain]
+> pip install 'defipy[chain]'
 ```
 
 This pulls in `web3scout` (which `LiveProvider` uses internally for ABI loading, contract reads, and token-fetching) plus `web3.py`. With `[chain]` installed, you can construct twins from real chain state:
@@ -96,14 +98,14 @@ snapshot = provider.snapshot("uniswap_v2:0xB4e16d0168e52d35CaCD2c6185b44281Ec28C
 lp = StateTwinBuilder().build(snapshot)
 ```
 
-> **Note:** the `[chain]` extra pins `web3 < 7.0` because `web3scout 0.2.0` depends on `eth_utils.abi.get_abi_input_types`, which was removed in web3 7. If you have web3 7.x installed for other reasons, `pip install defipy[chain]` will downgrade it. Tracking upstream as v2.2 work.
+> **Note:** the `[chain]` extra pins `web3 < 7.0` because `web3scout 0.2.0` depends on `eth_utils.abi.get_abi_input_types`, which was removed in web3 7. If you have web3 7.x installed for other reasons, `pip install 'defipy[chain]'` will downgrade it. Tracking upstream as v2.2 work.
 
 ### Agentic install (full LLM + chain stack)
 
 For users building LLM-driven systems against live chain state — the canonical *Python SDK for Agentic DeFi* use case — install the `[agentic]` extra:
 
 ```
-> pip install defipy[agentic]
+> pip install 'defipy[agentic]'
 ```
 
 This composes `[chain]` and `[mcp]` in one step: `web3scout` and `web3.py` for `LiveProvider` chain reads, plus the `mcp` Python SDK for serving DeFiPy's primitives as tools to Claude Desktop, Claude Code, or any MCP-compatible client. Equivalent to `pip install defipy[chain,mcp]` but spelled with intent.
@@ -115,7 +117,7 @@ The same `web3 < 7.0` pin from the `[chain]` extra applies.
 To run the MCP server that exposes DeFiPy's primitives as tools to Claude Desktop, Claude Code, or any MCP-compatible client, install the `[mcp]` extra:
 
 ```
-> pip install defipy[mcp]
+> pip install 'defipy[mcp]'
 ```
 
 This adds the [`mcp`](https://github.com/modelcontextprotocol/python-sdk) Python SDK on top of the core install. The MCP server itself lives at [`python/mcp/defipy_mcp_server.py`](./python/mcp/defipy_mcp_server.py); see [`python/mcp/README.md`](./python/mcp/README.md) for Claude Desktop and Claude Code configuration snippets.
@@ -125,7 +127,7 @@ This adds the [`mcp`](https://github.com/modelcontextprotocol/python-sdk) Python
 Chapter 9 of *Hands-On AMMs with Python* — *Building Autonomous DeFi Agents* — uses live chain integration via `web3scout`. To run those examples, install the `[book]` extra:
 
 ```
-> pip install defipy[book]
+> pip install 'defipy[book]'
 ```
 
 The `[book]` extra carries the same package set as `[chain]` (`web3scout` + `web3`). The split is intent-based — `[chain]` signals production live-state reads via LiveProvider; `[book]` signals textbook chapter 9 use. Either works for either purpose.
@@ -135,7 +137,7 @@ The `[book]` extra carries the same package set as `[chain]` (`web3scout` + `web
 If you're using `ExecuteScript` or `UniswapScriptHelper` against a local [Anvil](https://book.getfoundry.sh/anvil/) node and don't need the full `web3scout` event-monitoring stack, the lighter `[anvil]` extra just adds `web3.py`:
 
 ```
-> pip install defipy[anvil]
+> pip install 'defipy[anvil]'
 ```
 
 `[book]` and `[chain]` already include everything in `[anvil]`, so users on either of those don't need it separately.
