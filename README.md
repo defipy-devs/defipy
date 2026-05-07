@@ -19,13 +19,15 @@ v2.1 makes the [State Twin](https://defipy.org/twin-concept/) **real**. `LivePro
 * **`LiveProvider`** — `provider.snapshot("uniswap_v2:0xADDR")` and `provider.snapshot("uniswap_v3:0xADDR")` build `V2PoolSnapshot` and `V3PoolSnapshot` from real on-chain state. Block pinning is automatic — `"latest"` resolves once at the top of `.snapshot()` and every read inside that snapshot pins to the same block. Pass `block_number=N` for historical reads.
 * **Multicall3 batching for V3** — V3 snapshots batch `slot0`, `liquidity`, `fee`, `tickSpacing`, `token0`, `token1`, and block timestamp into one [Multicall3](https://github.com/mds1/multicall) `aggregate3` round trip. Hardcoded canonical Multicall3 address; works on every major EVM chain.
 * **`PoolSnapshot` enrichment** — every snapshot now carries `block_number`, `timestamp`, `chain_id` as optional fields. `LiveProvider` populates them from chain reads; `MockProvider` leaves them `None` to honestly signal "synthetic, not chain state."
+* **`PoolHealth` ergonomics for V3** — `CheckPoolHealth` now reports `fee_pips` (V3 fee tier in pips, `None` for V2), `tvl_in_token1` (symmetric to existing `tvl_in_token0`), and `tick_current` (V3 current tick, `None` for V2). All additive; no API breakage. `RugSignalReport` gets the new fields transitively.
 * **`provider.get_w3()`** — the underlying `web3.Web3` instance is now public, for callers who want to sign transactions or wire LiveProvider into their own broader chain tooling. DeFiPy stays read-only by design; bring your own signing opinion.
 * **Fork-and-evaluate worked example** — [`python/examples/state_twin_fork_evaluate.py`](./python/examples/state_twin_fork_evaluate.py) demonstrates the State Twin's multi-scenario reasoning pattern against live mainnet state. Pull a V3 pool snapshot once, fork the twin N ways under price scenarios, run primitives against each fork, aggregate into a recommendation. Walks through the pattern at [defipy.org/fork-evaluate/](https://defipy.org/fork-evaluate/).
 * **`[chain]` install extra** — `pip install defipy[chain]` adds `web3scout` and `web3.py` for users who want LiveProvider. Core install (no extras) remains free of any chain or LLM dependencies.
+* **`[agentic]` install extra** — `pip install defipy[agentic]` composes `[chain]` and `[mcp]` for the canonical *Python SDK for Agentic DeFi* full-stack install. Equivalent to `pip install defipy[chain,mcp]` but spelled with intent.
 
 V2.1 is a strict superset of v2.0 — every v2.0 primitive, MockProvider recipe, and MCP server pattern works identically. What changes is that the same primitives now run against live chain state without changing call shape.
 
-**What's deferred to v2.2:** Balancer and Stableswap LiveProvider implementations. V3 tick bitmap walking (active-liquidity-only is the v2.1 stance). Calls for those raise `NotImplementedError` pointing at the planned version.
+**What's deferred to v2.2:** Balancer and Stableswap LiveProvider implementations raise `NotImplementedError` pointing at the planned version. V3 tick bitmap walking is also v2.2 work; in v2.1, V3 LiveProvider snapshots cover active-liquidity only — primitives that depend on non-active-tick liquidity (e.g., `AssessLiquidityDepth`) ship in v2.2.
 
 ## v2.0 foundations
 
@@ -205,6 +207,7 @@ The fastest way to see DeFiPy at work — pull a real Uniswap V2 pool's state fr
         "uniswap_v2:0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
     )
     lp = StateTwinBuilder().build(snapshot)
+    lp.summary()
 
     # Snapshot carries chain context — block_number, timestamp, chain_id
     print(f"Block:   {snapshot.block_number}")
@@ -224,7 +227,7 @@ The fastest way to see DeFiPy at work — pull a real Uniswap V2 pool's state fr
     print(f"IL %:        {result.il_percentage:.4f}")
     print(f"Current val: {result.current_value:.4f}")
 
-The same shape works for V3 — swap `uniswap_v2:` for `uniswap_v3:` and the appropriate pool address (e.g. `0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640` for USDC/WETH 3000bps). V3 snapshots default to full-range ticks; pass `lwr_tick=N, upr_tick=N` to override. See the [LiveProvider docs](https://defipy.org/live-provider/) for block pinning, the V3 tick-range surface, and the active-liquidity-only caveat.
+The same shape works for V3 — swap `uniswap_v2:` for `uniswap_v3:` and the appropriate pool address (e.g. `0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640` for USDC/WETH 500bps). V3 snapshots default to full-range ticks; pass `lwr_tick=N, upr_tick=N` to override. See the [LiveProvider docs](https://defipy.org/live-provider/) for block pinning, the V3 tick-range surface, and the active-liquidity-only caveat.
 
 **No chain access?** Substitute `MockProvider` for `LiveProvider` and pass a recipe name (`"eth_dai_v2"`, `"eth_dai_v3"`, `"eth_dai_balancer_50_50"`, `"usdc_dai_stableswap_A10"`). Same primitive call, same result shape, no network needed:
 
@@ -280,15 +283,17 @@ To construct a Uniswap V3 pool directly (outside MockProvider's canonical recipe
 
 ## 🧪 Tests
 
-DeFiPy ships ~677 tests across primitives, tools, twin, packaging, and the MCP server dispatch layer. Run the full suite:
+DeFiPy ships ~686 tests across primitives, tools, twin, packaging, and the MCP server dispatch layer. Run the full suite:
 
     pytest python/test/ -v
 
-Run just the primitive suite (504 tests, no MCP or twin dependencies):
+Expect ~686 passed and 11 skipped — the skipped tests are the live-RPC suites, gated by the `DEFIPY_LIVE_RPC` environment variable. They run against real mainnet pools and aren't part of the default suite to keep CI deterministic.
+
+Run just the primitive suite (no MCP or twin dependencies):
 
     pytest python/test/primitives/ -v
 
-The twin suite includes opt-in live-RPC tests gated by the `DEFIPY_LIVE_RPC` environment variable — set it to a mainnet RPC URL to verify LiveProvider against real chain state:
+To run the opt-in live-RPC tests, set `DEFIPY_LIVE_RPC` to a mainnet RPC URL:
 
     DEFIPY_LIVE_RPC=https://eth-mainnet.g.alchemy.com/v2/<key> pytest -m live_rpc -v
 

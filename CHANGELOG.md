@@ -202,5 +202,6 @@ and GitHub release notes for earlier release history.
 
 ---
 
+[2.1.0]: https://github.com/defipy-devs/defipy/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/defipy-devs/defipy/compare/v1.2.0...v2.0.0
 [1.2.0]: https://github.com/defipy-devs/defipy/releases/tag/v1.2.0
