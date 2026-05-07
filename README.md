@@ -14,7 +14,7 @@ For onchain event access and scripting, use [LiveProvider](https://defipy.org/li
 
 ## 🆕 What's new in v2.1
 
-v2.1 makes the State Twin **real**. `LiveProvider` ships for Uniswap V2 and V3 — chain reads compose with every primitive in the library, the same way `MockProvider` recipes do. The "what would happen if?" loop is now local: pull state once, simulate forever, decide before executing.
+v2.1 makes the [State Twin](https://defipy.org/twin-concept/) **real**. `LiveProvider` ships for Uniswap V2 and V3 — chain reads compose with every primitive in the library, the same way `MockProvider` recipes do. The "what would happen if?" loop is now local: pull state once, simulate forever, decide before executing.
 
 * **`LiveProvider`** — `provider.snapshot("uniswap_v2:0xADDR")` and `provider.snapshot("uniswap_v3:0xADDR")` build `V2PoolSnapshot` and `V3PoolSnapshot` from real on-chain state. Block pinning is automatic — `"latest"` resolves once at the top of `.snapshot()` and every read inside that snapshot pins to the same block. Pass `block_number=N` for historical reads.
 * **Multicall3 batching for V3** — V3 snapshots batch `slot0`, `liquidity`, `fee`, `tickSpacing`, `token0`, `token1`, and block timestamp into one [Multicall3](https://github.com/mds1/multicall) `aggregate3` round trip. Hardcoded canonical Multicall3 address; works on every major EVM chain.
