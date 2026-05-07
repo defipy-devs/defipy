@@ -129,8 +129,10 @@ class CheckPoolHealth:
         # reserve0 alone — token1 value is undefined without a price.
         if spot_price and spot_price > 0:
             tvl_in_token0 = reserve0 + reserve1 / spot_price
+            tvl_in_token1 = reserve1 + reserve0 * spot_price
         else:
             tvl_in_token0 = reserve0
+            tvl_in_token1 = reserve1
 
         # Accumulated fees. V2's collected_fee* is already in human
         # units via convert_to_human at write time; V3 stores in
@@ -153,6 +155,13 @@ class CheckPoolHealth:
 
         has_activity = num_swaps is not None and num_swaps > 0
 
+        # V3-only metadata — fee tier and active tick. V2 reports None
+        # for both: V2's 0.3% fee isn't expressed as integer pips, and
+        # V2 has no tick concept. Per D24/D25/D27.
+        is_v3 = lp.version == UniswapExchangeData.VERSION_V3
+        fee_pips = lp.fee if is_v3 else None
+        tick_current = lp.slot0.tick if is_v3 else None
+
         return PoolHealth(
             version = lp.version,
             token0_name = lp.token0,
@@ -169,6 +178,9 @@ class CheckPoolHealth:
             num_lps = num_lps,
             top_lp_share_pct = top_lp_share_pct,
             has_activity = has_activity,
+            fee_pips = fee_pips,
+            tvl_in_token1 = tvl_in_token1,
+            tick_current = tick_current,
         )
 
     def _swap_activity(self, lp, recent_window):

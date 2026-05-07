@@ -463,6 +463,47 @@ def test_live_twin_runs_through_check_pool_health():
     assert health.reserve1 == pytest.approx(snap.reserve1)
 
 
+# Phase 3a — get_w3() public access + lazy client caching
+def test_get_w3_returns_web3_instance_passthrough():
+    """get_w3() returns the underlying web3 instance from the injected
+    fake (test path) or from make_client() (production path). The
+    injected-fake test verifies passthrough."""
+    fake = build_fake_client(
+        pool=canonical_weth_usdc_v2_spec(),
+        tokens=canonical_weth_usdc_token_specs(),
+    )
+    provider = LiveProvider._with_client(fake)
+    assert provider.get_w3() is fake.get_w3()
+
+
+def test_get_w3_caches_client_across_calls():
+    """Repeated get_w3() calls return the same web3 instance — the
+    underlying RpcClient is constructed once and cached. C3a / D20."""
+    fake = build_fake_client(
+        pool=canonical_weth_usdc_v2_spec(),
+        tokens=canonical_weth_usdc_token_specs(),
+    )
+    provider = LiveProvider._with_client(fake)
+    assert provider.get_w3() is provider.get_w3()
+
+
+def test_snapshot_after_get_w3_reuses_cached_client():
+    """Calling .snapshot() after get_w3() does not construct a new
+    RpcClient — the cached client serves both paths."""
+    fake = build_fake_client(
+        pool=canonical_weth_usdc_v2_spec(),
+        tokens=canonical_weth_usdc_token_specs(),
+    )
+    provider = LiveProvider._with_client(fake)
+    w3_first = provider.get_w3()
+    snap = provider.snapshot(_provider_pool_id())
+    # The same fake client served both calls — the snapshot path
+    # didn't reach for a fresh make_client() and didn't replace the
+    # cached client.
+    assert provider.get_w3() is w3_first
+    assert snap.token0_name == "USDC"
+
+
 # Phase 2 retrofit — V2 LiveProvider populates enrichment fields
 def test_v2_snapshot_populates_chain_context():
     """After Phase 2's V2 retrofit, V2 LiveProvider snapshots carry

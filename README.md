@@ -19,6 +19,7 @@ v2.1 makes the [State Twin](https://defipy.org/twin-concept/) **real**. `LivePro
 * **`LiveProvider`** — `provider.snapshot("uniswap_v2:0xADDR")` and `provider.snapshot("uniswap_v3:0xADDR")` build `V2PoolSnapshot` and `V3PoolSnapshot` from real on-chain state. Block pinning is automatic — `"latest"` resolves once at the top of `.snapshot()` and every read inside that snapshot pins to the same block. Pass `block_number=N` for historical reads.
 * **Multicall3 batching for V3** — V3 snapshots batch `slot0`, `liquidity`, `fee`, `tickSpacing`, `token0`, `token1`, and block timestamp into one [Multicall3](https://github.com/mds1/multicall) `aggregate3` round trip. Hardcoded canonical Multicall3 address; works on every major EVM chain.
 * **`PoolSnapshot` enrichment** — every snapshot now carries `block_number`, `timestamp`, `chain_id` as optional fields. `LiveProvider` populates them from chain reads; `MockProvider` leaves them `None` to honestly signal "synthetic, not chain state."
+* **`provider.get_w3()`** — the underlying `web3.Web3` instance is now public, for callers who want to sign transactions or wire LiveProvider into their own broader chain tooling. DeFiPy stays read-only by design; bring your own signing opinion.
 * **`[chain]` install extra** — `pip install defipy[chain]` adds `web3scout` and `web3.py` for users who want LiveProvider. Core install (no extras) remains free of any chain or LLM dependencies.
 
 V2.1 is a strict superset of v2.0 — every v2.0 primitive, MockProvider recipe, and MCP server pattern works identically. What changes is that the same primitives now run against live chain state without changing call shape.
@@ -93,6 +94,18 @@ lp = StateTwinBuilder().build(snapshot)
 ```
 
 > **Note:** the `[chain]` extra pins `web3 < 7.0` because `web3scout 0.2.0` depends on `eth_utils.abi.get_abi_input_types`, which was removed in web3 7. If you have web3 7.x installed for other reasons, `pip install defipy[chain]` will downgrade it. Tracking upstream as v2.2 work.
+
+### Agentic install (full LLM + chain stack)
+
+For users building LLM-driven systems against live chain state — the canonical *Python SDK for Agentic DeFi* use case — install the `[agentic]` extra:
+
+```
+> pip install defipy[agentic]
+```
+
+This composes `[chain]` and `[mcp]` in one step: `web3scout` and `web3.py` for `LiveProvider` chain reads, plus the `mcp` Python SDK for serving DeFiPy's primitives as tools to Claude Desktop, Claude Code, or any MCP-compatible client. Equivalent to `pip install defipy[chain,mcp]` but spelled with intent.
+
+The same `web3 < 7.0` pin from the `[chain]` extra applies.
 
 ### MCP install (Claude Desktop / Claude Code demo)
 

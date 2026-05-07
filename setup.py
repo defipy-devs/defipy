@@ -4,12 +4,14 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      # 2.1.0a2: second alpha for v2.1 State Twin Completion. Phase 2
-      # ships V3 LiveProvider + Multicall3 batching + PoolSnapshot
-      # enrichment. Version stays in the 2.1.0aN series until Phase 3
-      # (fork-and-evaluate demo) lands; 2.1.0 final tags simultaneously
-      # with the Phase 3 commit per STATE_TWIN_COMPLETION_PLAN.md.
-      version='2.1.0a2',
+      # 2.1.0a3: third alpha for v2.1 State Twin Completion. Phase 3a
+      # ships substrate-completeness fixes — LiveProvider.get_w3() for
+      # consumer-side signing and PoolHealth field additions for V3
+      # ergonomics (fee_pips, tvl_in_token1, tick_current). Version
+      # stays in the 2.1.0aN series until Phase 3b (fork-and-evaluate
+      # demo) lands; 2.1.0 final tags simultaneously with the Phase 3b
+      # commit per STATE_TWIN_COMPLETION_PLAN.md.
+      version='2.1.0a3',
       description='Python SDK for Agentic DeFi',
       long_description=long_description,
       long_description_content_type="text/markdown",
@@ -98,5 +100,11 @@ setup(name='DeFiPy',
           # Claude Code. Not required for library usage. mcp-1.27.0 was
           # the current release at v2.0 time of writing.
           'mcp': ['mcp >= 1.27.0'],
+          # [agentic]: full agentic-DeFi stack — chain reads + MCP server.
+          # Composes [chain] and [mcp] for users building LLM-driven
+          # systems against live chain state. The canonical install for
+          # the "Python SDK for Agentic DeFi" use case. Equivalent to
+          # `pip install defipy[chain,mcp]` but spelled with intent.
+          'agentic': ['web3scout >= 0.2.0', 'web3 >= 6.0, < 7.0', 'mcp >= 1.27.0'],
       },
       zip_safe=False)

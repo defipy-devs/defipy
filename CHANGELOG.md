@@ -10,6 +10,49 @@ and the GitHub releases page.
 
 ---
 
+## [2.1.0a3] — 2026-05-07 (UNRELEASED)
+
+Third alpha of the v2.1 "State Twin Completion" cycle. Phase 3a ships two
+substrate-completeness fixes surfaced when LiveProvider was first exercised
+against real V3 mainnet pools.
+
+### Added
+
+- **`LiveProvider.get_w3()`** — public method returning the underlying
+  `web3.Web3` instance. DeFiPy stays read-only by design; consumers needing
+  to sign transactions reach the substrate underneath via this method rather
+  than monkey-patching internals or rebuilding their own `ConnectW3`. Lazy
+  client caching: first `get_w3()` or `.snapshot()` call constructs the
+  `RpcClient`; both methods share one connection per `LiveProvider` instance
+  for the rest of its lifetime.
+- **`PoolHealth` ergonomics for V3** — three additive fields:
+  - `fee_pips: Optional[int]` — V3 fee tier in pips (None for V2).
+  - `tvl_in_token1: float` — symmetric to existing `tvl_in_token0`.
+  - `tick_current: Optional[int]` — V3 current tick (None for V2).
+  All populated by `CheckPoolHealth.apply()`. Strictly additive; no API
+  breakage. `RugSignalReport` (which embeds `PoolHealth`) gets the new
+  fields transitively without code change.
+
+### Changed
+
+- **`LiveProvider` connection lifecycle** — the underlying connection is
+  now cached on the instance from first use through GC, rather than
+  reconstructed per snapshot. Snapshots themselves remain stateless (no
+  caching of pool state or block data); the connection reuse is a pure
+  efficiency win for callers making multiple snapshots from one provider.
+
+### Notes
+
+- `get_w3()` is the substrate boundary for execution. Transaction tooling
+  beyond it (signing helpers, gas estimation, transaction builders) is
+  consumer-domain or sibling-library territory, not DeFiPy's. The substrate
+  stays small.
+- "Result dataclasses should be complete against the notebook user's first
+  attempt to read them" — the principle the PoolHealth fix establishes for
+  future result dataclass design.
+
+---
+
 ## [2.1.0a2] — 2026-05-06 (UNRELEASED)
 
 Second alpha of the v2.1 "State Twin Completion" cycle. Phase 2 ships V3
@@ -33,6 +76,12 @@ LiveProvider with Multicall3 batching and PoolSnapshot enrichment.
   LiveProvider populates from chain reads (V2 retrofit + V3 native);
   MockProvider snapshots stay `None` to honestly signal "synthetic, not a
   chain read."
+- **`[agentic]` install extra** — composes `[chain]` and `[mcp]` for
+  users building LLM-driven systems against live chain state. Equivalent
+  to `pip install defipy[chain,mcp]` but spelled with intent; matches the
+  "Python SDK for Agentic DeFi" framing. The capability extras
+  (`[chain]`, `[mcp]`) keep their single-purpose semantics; `[agentic]`
+  is a persona-named bundle for the canonical full-stack install.
 
 ### Changed
 

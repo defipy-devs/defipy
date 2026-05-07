@@ -96,12 +96,17 @@ class LiveProvider(StateTwinProvider):
     `.snapshot()`, then every subsequent `eth_call` pins to that
     block. State drift across reads inside one snapshot can't happen.
 
-    Stateless across calls
-    ----------------------
-    LiveProvider holds no caching, no connection pool, no persistence.
-    Each `.snapshot()` constructs a fresh RpcClient. Caching, pooling,
-    and reorg-detection are consumer concerns (see DeFiMind for an
-    opinionated take).
+    Stateless snapshots, reused connection
+    --------------------------------------
+    Each `.snapshot()` produces a fresh PoolSnapshot from a fresh chain
+    read — no caching of pool state, block data, or snapshot results.
+    The underlying web3 connection IS reused: the first `.snapshot()`
+    or `.get_w3()` call constructs an RpcClient via `make_client()`
+    and caches it on the instance for the rest of its lifetime. For
+    long-running processes that may see the connection go stale,
+    construct a fresh LiveProvider periodically. Snapshot caching,
+    connection pooling, and reorg-detection are consumer concerns
+    (see DeFiMind for an opinionated take).
 
     Examples
     --------
@@ -119,10 +124,14 @@ class LiveProvider(StateTwinProvider):
 
     def __init__(self, rpc_url: str):
         self.rpc_url = rpc_url
-        # Client is constructed lazily in .snapshot() so the constructor
-        # works without web3 installed. Tests inject a client via
-        # _with_client(); production users get one created on demand.
-        self._injected_client = None
+        # Client is constructed lazily on the first .snapshot() or
+        # .get_w3() call so the constructor works without web3 installed.
+        # Cached for the life of the LiveProvider instance per D20 —
+        # snapshots are stateless (no caching of pool state, block data,
+        # or snapshot results) but the connection is reused across calls.
+        # Tests inject a client via _with_client(), which sets this
+        # attribute directly to bypass the production make_client() path.
+        self._cached_client = None
 
     # ─── Test-only constructor ─────────────────────────────────────────────
 
@@ -140,8 +149,40 @@ class LiveProvider(StateTwinProvider):
         """
         provider = cls.__new__(cls)
         provider.rpc_url = "<injected>"
-        provider._injected_client = client
+        provider._cached_client = client
         return provider
+
+    # ─── Public API: web3 access ───────────────────────────────────────────
+
+    def get_w3(self):
+        """Return the underlying web3.Web3 instance.
+
+        DeFiPy is read-only by design; LiveProvider does not sign or
+        send transactions. Consumers needing to act on-chain pull the
+        web3 instance via this method and bring their own signing
+        infrastructure (private key management, hardware wallet, MPC
+        vault, signing service — DeFiPy stays out of that opinion).
+
+        Lazy construction. The underlying RpcClient is constructed on
+        first call to get_w3() or .snapshot() (whichever comes first)
+        and cached for the life of the LiveProvider instance. Both
+        methods share one connection. For long-running processes that
+        may see the connection go stale, construct a fresh
+        LiveProvider periodically or build your own
+        connection-management layer around get_w3().
+
+        Returns
+        -------
+        web3.Web3
+            The underlying web3 instance, ready for direct use.
+
+        Raises
+        ------
+        ImportError
+            If [chain] extra is not installed; surfaced from
+            _rpc.make_client() with the install instructions.
+        """
+        return self._get_client().get_w3()
 
     # ─── Public API ────────────────────────────────────────────────────────
 
@@ -244,15 +285,21 @@ class LiveProvider(StateTwinProvider):
     # ─── Client management ─────────────────────────────────────────────────
 
     def _get_client(self):
-        """Return the injected client (test path) or build a fresh one
-        (production path). Per-call construction in production keeps
-        the provider stateless; tests reuse one fake across calls."""
-        if self._injected_client is not None:
-            return self._injected_client
+        """Return the cached client (constructing it on first call).
+
+        Phase 3a — caching changed from "construct per snapshot" to
+        "construct once, reuse." Snapshots remain stateless (no caching
+        of pool state, block data, or snapshot results); only the
+        connection is reused. Test injection via _with_client() sets
+        _cached_client directly so the production make_client() path
+        is bypassed."""
+        if self._cached_client is not None:
+            return self._cached_client
         # Lazy import — keep `from defipy.twin import LiveProvider`
         # working without web3 installed.
         from defipy.twin import _rpc
-        return _rpc.make_client(self.rpc_url)
+        self._cached_client = _rpc.make_client(self.rpc_url)
+        return self._cached_client
 
     # ─── V2 snapshot ───────────────────────────────────────────────────────
 

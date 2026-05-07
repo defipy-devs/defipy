@@ -71,6 +71,18 @@ class PoolHealth:
     has_activity : bool
         True if num_swaps is known and > 0. False for an untouched
         pool or a V3 pool where swap count isn't tracked.
+    fee_pips : Optional[int]
+        V3 fee tier in pips (1/10000ths — e.g. 500 for 0.05%, 3000
+        for 0.3%, 10000 for 1%). None for V2 (V2 has a fixed 0.3%
+        fee, expressed elsewhere as a float).
+    tvl_in_token1 : float
+        Total value locked expressed in token1 numeraire:
+        reserve1 + reserve0 * spot_price. Symmetric counterpart to
+        tvl_in_token0; falls back to reserve1 alone when spot price
+        is zero or undefined.
+    tick_current : Optional[int]
+        V3 current tick at the time of the snapshot
+        (lp.slot0.tick). None for V2 (V2 has no tick concept).
     """
     version: str
     token0_name: str
@@ -87,3 +99,10 @@ class PoolHealth:
     num_lps: int
     top_lp_share_pct: Optional[float]
     has_activity: bool
+    # New in v2.1 Phase 3a — defaults preserve backward compatibility
+    # for direct-construction callers (test fixtures). V2 leaves the
+    # V3-only fields None; CheckPoolHealth populates them from chain
+    # state when constructing a V3 PoolHealth.
+    fee_pips: Optional[int] = None
+    tvl_in_token1: float = 0.0
+    tick_current: Optional[int] = None

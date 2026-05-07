@@ -79,6 +79,22 @@ class TestCheckPoolHealthV2(unittest.TestCase):
         result = self.health()
         self.assertAlmostEqual(result.tvl_in_token0, 2000.0, places = 4)
 
+    def test_tvl_in_token1_is_200000_dai(self):
+        # 100000 DAI + 1000 ETH * 100 = 200000 DAI numeraire.
+        result = self.health()
+        self.assertAlmostEqual(result.tvl_in_token1, 200000.0, places = 4)
+
+    def test_v2_fee_pips_is_none(self):
+        # V2's 0.3% fee isn't expressed as integer pips on the
+        # PoolHealth surface; reserved for V3 (D25/D27).
+        result = self.health()
+        self.assertIsNone(result.fee_pips)
+
+    def test_v2_tick_current_is_none(self):
+        # V2 has no tick concept.
+        result = self.health()
+        self.assertIsNone(result.tick_current)
+
     def test_total_liquidity_positive(self):
         result = self.health()
         self.assertGreater(result.total_liquidity, 0.0)
@@ -200,6 +216,22 @@ class TestCheckPoolHealthV3(unittest.TestCase):
     def test_v3_lp_count_positive(self):
         result = CheckPoolHealth().apply(self.setup.lp)
         self.assertGreaterEqual(result.num_lps, 1)
+
+    def test_v3_fee_pips_populated(self):
+        # V3 surfaces the fee tier in pips per D24/D25.
+        result = CheckPoolHealth().apply(self.setup.lp)
+        self.assertIsNotNone(result.fee_pips)
+        self.assertEqual(result.fee_pips, self.setup.lp.fee)
+
+    def test_v3_tvl_in_token1_positive(self):
+        result = CheckPoolHealth().apply(self.setup.lp)
+        self.assertGreater(result.tvl_in_token1, 0.0)
+
+    def test_v3_tick_current_populated(self):
+        # V3 surfaces the active tick from slot0 per D27.
+        result = CheckPoolHealth().apply(self.setup.lp)
+        self.assertIsNotNone(result.tick_current)
+        self.assertEqual(result.tick_current, self.setup.lp.slot0.tick)
 
 
 if __name__ == '__main__':
