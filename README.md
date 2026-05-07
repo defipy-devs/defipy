@@ -8,7 +8,7 @@ Underneath, DeFiPy is modular by protocol:
 * [BalancerPy](https://github.com/defipy-devs/balancerpy)
 * [StableSwapPy](https://github.com/defipy-devs/stableswappy)
 
-For onchain event access and scripting, pair it with [Web3Scout](https://github.com/defipy-devs/web3scout) — a companion tool for [decoding pool events](https://defipy.readthedocs.io/en/latest/onchain/pool_events.html) and [interfacing with Solidity contracts](https://defipy.readthedocs.io/en/latest/onchain/testnet_sim_univ2.html).
+For onchain event access and scripting, use [LiveProvider](https://defipy.org/live-provider/) as of v2.1 — it pulls live pool state into the same primitive surface that runs against synthetic recipes. Under the hood it's powered by [Web3Scout](https://github.com/defipy-devs/web3scout); install via the `[chain]` extra (see below).
 
 🔗 SPDX-Anchor: [anchorregistry.ai/AR-2026-YdPXB5g](https://anchorregistry.ai/AR-2026-YdPXB5g)
 
@@ -45,7 +45,7 @@ Claude reads the tool descriptions, picks `CheckPoolHealth`, calls it against a 
 
 ## 🧩 What DeFiPy offers
 
-22 primitives across 7 categories. Each answers a specific LP question with exact math and returns a typed dataclass result:
+21 primitives across 7 categories. Each answers a specific LP question with exact math and returns a typed dataclass result:
 
 * **Position analysis** — "Why is my position losing money? What if price moves X%?" PnL decomposition (IL, fees, net result) and price-move scenarios across Uniswap V2/V3, Balancer, and Stableswap. Includes break-even pricing and time-to-breakeven analysis.
 * **Pool health** — "Is this pool healthy? Any rug signals?" TVL, LP concentration, activity, threshold-based rug detection, fee-anomaly checks (V2/V3).
@@ -70,7 +70,7 @@ DeFiPy requires **Python 3.10 or later**. Install via pip:
 > pip install defipy
 ```
 
-The core install is the pure analytics engine — AMM math, primitives, State Twin, and all 22 typed analytics functions. It has **zero web3 dependencies and zero LLM dependencies**. No chain reads, no RPC calls, no MCP. Chain reads come from [Web3Scout](https://github.com/defipy-devs/web3scout) (via the `[chain]` or `[book]` extras); MCP tool serving comes from the `[mcp]` extra. All optional.
+The core install is the pure analytics engine — AMM math, primitives, State Twin, and all 21 typed analytics functions. It has **zero web3 dependencies and zero LLM dependencies**. No chain reads, no RPC calls, no MCP. Chain reads come from [Web3Scout](https://github.com/defipy-devs/web3scout) (via the `[chain]` or `[book]` extras); MCP tool serving comes from the `[mcp]` extra. All optional.
 
 ### Chain install (LiveProvider — v2.1+)
 
