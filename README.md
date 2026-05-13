@@ -8,9 +8,7 @@ Underneath, DeFiPy is modular by protocol:
 * [BalancerPy](https://github.com/defipy-devs/balancerpy)
 * [StableSwapPy](https://github.com/defipy-devs/stableswappy)
 
-For onchain event access and scripting, use [LiveProvider](https://defipy.org/live-provider/) as of v2.1 — it pulls live pool state into the same primitive surface that runs against synthetic recipes. Under the hood it's powered by [Web3Scout](https://github.com/defipy-devs/web3scout); install via the `[chain]` extra (see below).
-
-📄 Paper: [![arXiv](https://img.shields.io/badge/arXiv-2605.11522-b31b1b.svg)](https://arxiv.org/abs/2605.11522)
+For onchain event access and scripting, use [LiveProvider](https://defipy.org/live-provider/) as of v2.1 — it pulls live pool state into the same primitive surface that runs against synthetic recipes. Under the hood it's powered by [Web3Scout](https://github.com/defipy-devs/web3scout); install via the `[chain]` extra (see below); see paper [![arXiv](https://img.shields.io/badge/arXiv-2605.11522-b31b1b.svg)](https://arxiv.org/abs/2605.11522)
 
 ## 🆕 What's new in v2.1
 
