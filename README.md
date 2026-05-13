@@ -10,11 +10,11 @@ Underneath, DeFiPy is modular by protocol:
 
 For onchain event access and scripting, use [LiveProvider](https://defipy.org/live-provider/) as of v2.1 — it pulls live pool state into the same primitive surface that runs against synthetic recipes. Under the hood it's powered by [Web3Scout](https://github.com/defipy-devs/web3scout); install via the `[chain]` extra (see below).
 
-🔗 SPDX-Anchor: [anchorregistry.ai/AR-2026-YdPXB5g](https://anchorregistry.ai/AR-2026-YdPXB5g)
+📄 Paper: [![arXiv](https://img.shields.io/badge/arXiv-2605.11522-b31b1b.svg)](https://arxiv.org/abs/2605.11522)
 
 ## 🆕 What's new in v2.1
 
-v2.1 makes the [State Twin](https://defipy.org/twin-concept/) **real**. `LiveProvider` ships for Uniswap V2 and V3 — chain reads compose with every primitive in the library, the same way `MockProvider` recipes do. The "what would happen if?" loop is now local: pull state once, simulate forever, decide before executing.
+v2.1 makes the [State Twin](https://defipy.org/twin-concept/) **real** — the substrate formalized in [our arXiv paper](https://arxiv.org/abs/2605.11522). `LiveProvider` ships for Uniswap V2 and V3 — chain reads compose with every primitive in the library, the same way `MockProvider` recipes do. The "what would happen if?" loop is now local: pull state once, simulate forever, decide before executing.
 
 * **`LiveProvider`** — `provider.snapshot("uniswap_v2:0xADDR")` and `provider.snapshot("uniswap_v3:0xADDR")` build `V2PoolSnapshot` and `V3PoolSnapshot` from real on-chain state. Block pinning is automatic — `"latest"` resolves once at the top of `.snapshot()` and every read inside that snapshot pins to the same block. Pass `block_number=N` for historical reads.
 * **Multicall3 batching for V3** — V3 snapshots batch `slot0`, `liquidity`, `fee`, `tickSpacing`, `token0`, `token1`, and block timestamp into one [Multicall3](https://github.com/mds1/multicall) `aggregate3` round trip. Hardcoded canonical Multicall3 address; works on every major EVM chain.
@@ -292,7 +292,26 @@ To run the opt-in live-RPC tests, set `DEFIPY_LIVE_RPC` to a mainnet RPC URL:
 
     DEFIPY_LIVE_RPC=https://eth-mainnet.g.alchemy.com/v2/<key> pytest -m live_rpc -v
 
+## 📄 Citation
+
+If you use DeFiPy in research, please cite the State Twin paper:
+
+```bibtex
+@misc{moore2026statetwins,
+  title={State Twins: An Off-Chain Substrate for Agentic Reasoning over Decentralized Finance Protocols},
+  author={Moore, Ian C.},
+  year={2026},
+  eprint={2605.11522},
+  archivePrefix={arXiv},
+  primaryClass={cs.DC},
+  doi={10.48550/arXiv.2605.11522}
+}
+```
+
 ## License
 Licensed under the Apache License, Version 2.0.  
 See [LICENSE](./LICENSE) and [NOTICE](./NOTICE) for details.  
 Portions of this project may include code from third-party projects under compatible open-source licenses.
+
+<!-- Machine-readable provenance anchor -->
+🔗 SPDX-Anchor: [anchorregistry.ai/AR-2026-YdPXB5g](https://anchorregistry.ai/AR-2026-YdPXB5g)
