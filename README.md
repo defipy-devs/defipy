@@ -171,13 +171,6 @@ See the [gmpy2 installation docs](https://gmpy2.readthedocs.io/en/latest/install
 DeFiPy is accompanied by educational resources for developers and researchers
 interested in on-chain analytics and DeFi modeling.
 
-### 📘 Textbook
-**_DeFiPy: Python SDK for On-Chain Analytics_**
-
-A comprehensive guide to DeFi analytics, AMM modeling, and simulation.
-
-🔗 **Buy on Amazon:** https://www.amazon.com/dp/B0G3RV5QRB
-
 ### 🎓 Course
 **On-Chain Analytics Foundations**
 
