@@ -254,6 +254,72 @@ def multicall_aggregate3(w3, calls, block_number: int):
     return decoded_results
 
 
+def multicall_aggregate3_args(w3, calls, block_number, allow_failure = False):
+    """Batch view calls (no-arg or argument-bearing) through Multicall3.
+
+    Sibling to multicall_aggregate3. That helper only encodes a 4-byte
+    selector (no-arg reads); this one also ABI-encodes calldata args,
+    so it serves getPoolTokens(bytes32), coins(uint256),
+    balances(uint256), and the no-arg getters in one path. The no-arg
+    helper is left untouched so the V3 read path is unaffected.
+
+    Parameters
+    ----------
+    w3 : Web3
+        web3 client.
+    calls : list[tuple]
+        Each entry is (target, fn_signature, arg_types, args, decode_types):
+          - fn_signature : canonical "name(types)" form, e.g.
+            "coins(uint256)" or "getPoolId()".
+          - arg_types    : eth_abi input types, e.g. ["uint256"]; []
+            for a no-arg call.
+          - args         : argument values, e.g. [0]; [] for no-arg.
+          - decode_types : eth_abi return types, e.g. ["address"] or
+            ["address[]", "uint256[]", "uint256"].
+    block_number : int
+        Pin every sub-call to this block per R1 (block consistency).
+    allow_failure : bool
+        False (default): any sub-call revert raises RuntimeError (the
+        whole batch is allowFailure=False, so it reverts upstream first).
+        True: failed sub-calls return None in their result slot, used
+        by the Curve coin-count probe.
+
+    Returns
+    -------
+    list
+        One decoded value per call, in input order. Bare scalar for a
+        single-return call, tuple for multi-return. None for a failed
+        sub-call when allow_failure=True.
+    """
+    from eth_abi import encode, decode
+    from eth_utils import function_signature_to_4byte_selector
+    multicall = w3.eth.contract(
+        address = w3.to_checksum_address(MULTICALL3_ADDRESS),
+        abi = _MULTICALL3_ABI,
+    )
+    encoded = []
+    for target, fn_sig, arg_types, args, _decode_types in calls:
+        selector = function_signature_to_4byte_selector(fn_sig)
+        call_data = selector + (encode(arg_types, args) if arg_types else b"")
+        encoded.append((w3.to_checksum_address(target), allow_failure, call_data))
+    results = multicall.functions.aggregate3(encoded).call(
+        block_identifier = block_number,
+    )
+    decoded_results = []
+    for (success, return_data), (_t, fn_sig, _at, _a, decode_types) in zip(results, calls):
+        if not success:
+            if allow_failure:
+                decoded_results.append(None)
+                continue
+            raise RuntimeError(
+                "multicall_aggregate3_args: sub-call {!r} reverted "
+                "(allowFailure was off)".format(fn_sig)
+            )
+        out = decode(decode_types, return_data)
+        decoded_results.append(out[0] if len(decode_types) == 1 else out)
+    return decoded_results
+
+
 # ─── V2 helpers ────────────────────────────────────────────────────────────
 
 

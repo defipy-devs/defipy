@@ -82,14 +82,14 @@ setup(name='DeFiPy',
           # twin's _rpc.py module per D1 of STATE_TWIN_PHASE_1_EXPANDED.md.
           # web3 declared explicitly to make intent visible (it's a
           # transitive dep via web3scout).
-          'chain': ['web3scout >= 0.2.0', 'web3 >= 6.0, < 7.0'],
+          'chain': ['web3scout >= 1.0.0', 'web3 >= 6.0, < 7.0'],
           # [book]: for readers of 'Hands-On AMMs with Python'.
           #   - web3scout powers the chapter 9 agent examples.
           #   - web3 is needed by ExecuteScript and UniswapScriptHelper,
           #     which some chapters use against a local Anvil node.
           # Same packages as [chain] — kept separate because the intent
           # differs (textbook chapters vs production live-state reads).
-          'book': ['web3scout >= 0.2.0', 'web3 >= 6.0, < 7.0'],
+          'book': ['web3scout >= 1.0.0', 'web3 >= 6.0, < 7.0'],
           # [anvil]: for users running ExecuteScript or UniswapScriptHelper
           # against a local Anvil node WITHOUT needing web3scout's chain
           # event monitoring stack. Lighter install than [book] / [chain].
@@ -104,6 +104,6 @@ setup(name='DeFiPy',
           # systems against live chain state. The canonical install for
           # the "Python SDK for Agentic DeFi" use case. Equivalent to
           # `pip install defipy[chain,mcp]` but spelled with intent.
-          'agentic': ['web3scout >= 0.2.0', 'web3 >= 6.0, < 7.0', 'mcp >= 1.27.0'],
+          'agentic': ['web3scout >= 1.0.0', 'web3 >= 6.0, < 7.0', 'mcp >= 1.27.0'],
       },
       zip_safe=False)
