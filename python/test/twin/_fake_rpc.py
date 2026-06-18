@@ -112,6 +112,82 @@ class TokenSpec:
     decimals: int
 
 
+@dataclass
+class BalancerPoolSpec:
+    """Canned response set for a single Balancer V2 WeightedPool.
+
+    v2.2 Phase 2 — fields mirror the 2-hop read: the pool answers
+    `getPoolId()`/`getVault()`/`getNormalizedWeights()`; the Vault
+    answers `getPoolTokens(poolId)` with (tokens[], balances[],
+    lastChangeBlock). The fake registers this spec at BOTH the pool
+    address and the vault address so the selector → spec dispatch
+    resolves for both targets (the function name disambiguates).
+
+    `balance{0,1}_raw` are RAW uint balances (what getPoolTokens
+    returns on-chain); LiveProvider does the decimal scaling.
+    `weight{0,1}_raw` are 1e18-scaled and must sum to 1e18.
+    """
+    address: str
+    pool_id: bytes          # bytes32
+    vault_address: str
+    token0_address: str
+    token1_address: str
+    balance0_raw: int
+    balance1_raw: int
+    weight0_raw: int        # 1e18-scaled; weight0_raw + weight1_raw == 1e18
+    weight1_raw: int
+    last_change_block: int = 0
+    # Test-only escape hatch for the >2-asset scope-guard test: extra
+    # (address, raw balance) entries appended to the getPoolTokens
+    # return so a 3-asset pool can be simulated. Empty for the normal
+    # 2-asset case.
+    extra_token_addresses: list = field(default_factory=list)
+    extra_balances_raw: list = field(default_factory=list)
+
+    @classmethod
+    def from_human(
+        cls,
+        *,
+        address,
+        pool_id,
+        vault_address,
+        token0_address,
+        token1_address,
+        balance0,
+        balance1,
+        weight0,
+        weight1,
+        decimals0,
+        decimals1,
+        last_change_block=0,
+    ):
+        """Build a spec from human-readable weights/balances.
+
+        Scales `balance{0,1}` by the token decimals to raw uints and
+        `weight{0,1}` (e.g. 0.8 / 0.2) by 1e18. Mirrors how a real
+        WeightedPool stores normalized weights summing to 1e18.
+
+        Balance scaling goes through Decimal so a round human amount
+        (e.g. 100000.0 at 18 decimals) yields the exact raw integer
+        (10**23) and round-trips back to 100000.0 — float
+        multiplication would drift (int(100000.0 * 10**18) loses the
+        low digits). This keeps fixture-parity assertions exact.
+        """
+        from decimal import Decimal
+        return cls(
+            address = address,
+            pool_id = pool_id,
+            vault_address = vault_address,
+            token0_address = token0_address,
+            token1_address = token1_address,
+            balance0_raw = int(Decimal(str(balance0)) * (10**decimals0)),
+            balance1_raw = int(Decimal(str(balance1)) * (10**decimals1)),
+            weight0_raw = int(round(weight0 * 1e18)),
+            weight1_raw = int(round(weight1 * 1e18)),
+            last_change_block = last_change_block,
+        )
+
+
 # ─── FakeContract / FakeFunctions ──────────────────────────────────────────
 
 
@@ -196,6 +272,51 @@ class _V3PoolFunctions:
                           lambda: self._pool.tick_spacing)
 
 
+class _BalancerPoolFunctions:
+    """Functions surface for a Balancer V2 WeightedPool + its Vault.
+
+    v2.2 Phase 2 — the pool reads (getPoolId/getVault/
+    getNormalizedWeights) and the Vault read (getPoolTokens) both
+    dispatch against the same BalancerPoolSpec (registered at both
+    addresses). Production reads these via Multicall3, so they're
+    reached through `_BoundAggregate3` in the fake, exactly like V3.
+    """
+
+    def __init__(self, pool: "BalancerPoolSpec", recorder, address: str):
+        self._pool = pool
+        self._recorder = recorder
+        self._address = address
+
+    def getPoolId(self):
+        return _BoundCall(self._recorder, self._address, "getPoolId",
+                          lambda: self._pool.pool_id)
+
+    def getVault(self):
+        return _BoundCall(self._recorder, self._address, "getVault",
+                          lambda: self._pool.vault_address)
+
+    def getNormalizedWeights(self):
+        return _BoundCall(
+            self._recorder, self._address, "getNormalizedWeights",
+            lambda: [self._pool.weight0_raw, self._pool.weight1_raw],
+        )
+
+    def getPoolTokens(self):
+        # Vault read: (tokens[], balances[], lastChangeBlock). A
+        # single-pool fake ignores the poolId arg in call_data[4:].
+        # extra_* lists let a test simulate a >2-asset pool.
+        return _BoundCall(
+            self._recorder, self._address, "getPoolTokens",
+            lambda: (
+                [self._pool.token0_address, self._pool.token1_address]
+                + list(self._pool.extra_token_addresses),
+                [self._pool.balance0_raw, self._pool.balance1_raw]
+                + list(self._pool.extra_balances_raw),
+                self._pool.last_change_block,
+            ),
+        )
+
+
 class _ERC20Functions:
     """Functions surface for an ERC20: symbol/decimals/name/totalSupply."""
 
@@ -263,6 +384,17 @@ def _ensure_dispatch():
         _selector("totalSupply()"): ("totalSupply", ["uint256"]),
         _selector("symbol()"): ("symbol", ["string"]),
         _selector("decimals()"): ("decimals", ["uint8"]),
+        # Balancer V2 (v2.2 Phase 2). getPoolId/getVault/
+        # getNormalizedWeights dispatch against the pool address;
+        # getPoolTokens(bytes32) dispatches against the vault address.
+        _selector("getPoolId()"): ("getPoolId", ["bytes32"]),
+        _selector("getVault()"): ("getVault", ["address"]),
+        _selector("getNormalizedWeights()"): (
+            "getNormalizedWeights", ["uint256[]"],
+        ),
+        _selector("getPoolTokens(bytes32)"): (
+            "getPoolTokens", ["address[]", "uint256[]", "uint256"],
+        ),
     })
     _MULTICALL3_TIMESTAMP_SELECTOR = _selector("getCurrentBlockTimestamp()")
 
@@ -372,6 +504,10 @@ class _BoundAggregate3:
                 ).__getattribute__(fn_name)()._value_fn()
             if isinstance(spec, V3PoolSpec):
                 return _V3PoolFunctions(
+                    spec, [], target,
+                ).__getattribute__(fn_name)()._value_fn()
+            if isinstance(spec, BalancerPoolSpec):
+                return _BalancerPoolFunctions(
                     spec, [], target,
                 ).__getattribute__(fn_name)()._value_fn()
         # Token spec match — ERC20.
@@ -627,6 +763,14 @@ def build_fake_client(
         # Multicall3 address so LiveProvider's
         # `w3.eth.contract(address=MULTICALL3_ADDRESS, abi=...)` resolves.
         fake._multicall_mounted = True
+    elif isinstance(pool, BalancerPoolSpec):
+        # Balancer reads go through Multicall3 over two round trips.
+        # Register the spec at BOTH the pool address (getPoolId/getVault/
+        # getNormalizedWeights) and the vault address (getPoolTokens) so
+        # the selector → spec dispatch resolves for both targets.
+        fake._pool_specs[pool.address] = pool
+        fake._pool_specs[pool.vault_address] = pool
+        fake._multicall_mounted = True
     else:
         raise TypeError(
             "build_fake_client: pool must be V2PoolSpec or V3PoolSpec; "
@@ -730,3 +874,55 @@ def canonical_usdc_weth_v3_token_specs() -> list:
     # Same tokens as V2 — re-export under a V3-namespaced helper for
     # cross-test readability ("V3 tests use the V3 helper").
     return canonical_weth_usdc_token_specs()
+
+
+# ─── Canonical Balancer pool fixture: BAL/WETH 80/20 mainnet ───────────────
+#
+# Per the Phase 2 handoff: BAL/WETH 80/20 is the canonical Balancer V2
+# smoke pool — long-running, the archetypal weighted (non-50/50) pool.
+# token0 = BAL (lower address), token1 = WETH; both 18 decimals.
+# The Vault is the single canonical Balancer V2 Vault.
+
+BAL_WETH_BALANCER_POOL = "0x5c6Ee304399DBdB9C8Ef030aB642B10820DB8F56"
+BALANCER_VAULT = "0xBA12222222228d8Ba445958a75a0704d566BF2C8"
+BAL_ADDRESS = "0xba100000625a3754423978a60c9317c58a424e3D"   # token0 (lower addr)
+# Real mainnet poolId for 0x5c6Ee3...; opaque to the read path (only
+# used as the getPoolTokens(bytes32) argument, ignored by the fake).
+BAL_WETH_POOL_ID = bytes.fromhex(
+    "5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014"
+)
+
+
+def canonical_bal_weth_balancer_spec(
+    *,
+    bal_amount: float = 500_000.0,   # 500k BAL
+    weth_amount: float = 1_500.0,    # 1.5k WETH (~80/20 by value)
+    weight_bal: float = 0.8,
+    weight_weth: float = 0.2,
+) -> BalancerPoolSpec:
+    """Build a BalancerPoolSpec at canonical BAL/WETH 80/20 addresses.
+
+    Human balances/weights are scaled to raw uints / 1e18-weights by
+    BalancerPoolSpec.from_human. Tests can override weights for the
+    weight-sum / parity cases.
+    """
+    return BalancerPoolSpec.from_human(
+        address = BAL_WETH_BALANCER_POOL,
+        pool_id = BAL_WETH_POOL_ID,
+        vault_address = BALANCER_VAULT,
+        token0_address = BAL_ADDRESS,
+        token1_address = WETH_ADDRESS,
+        balance0 = bal_amount,
+        balance1 = weth_amount,
+        weight0 = weight_bal,
+        weight1 = weight_weth,
+        decimals0 = 18,
+        decimals1 = 18,
+    )
+
+
+def canonical_bal_weth_token_specs() -> list:
+    return [
+        TokenSpec(address=BAL_ADDRESS, symbol="BAL", decimals=18),
+        TokenSpec(address=WETH_ADDRESS, symbol="WETH", decimals=18),
+    ]

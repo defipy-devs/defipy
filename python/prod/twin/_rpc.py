@@ -351,6 +351,25 @@ def load_v3_pool_contract(w3, address: str):
     return abi.apply(w3, address)
 
 
+def load_balancer_pool_contract(w3, address: str):
+    """Load a Balancer V2 WeightedPool proxy via web3scout's ABI bundle.
+
+    Like load_v3_pool_contract, the snapshot read goes through
+    Multicall3 with raw selectors; this loader exists for symmetry and
+    for direct calls / live debugging.
+    """
+    from web3scout.abi.abi_load import ABILoad
+    from web3scout.enums.platforms_enum import PlatformsEnum
+    return ABILoad(PlatformsEnum.BALANCER, "WeightedPool").apply(w3, address)
+
+
+def load_balancer_vault_contract(w3, address: str):
+    """Load the Balancer V2 Vault proxy via web3scout's ABI bundle."""
+    from web3scout.abi.abi_load import ABILoad
+    from web3scout.enums.platforms_enum import PlatformsEnum
+    return ABILoad(PlatformsEnum.BALANCER, "Vault").apply(w3, address)
+
+
 def fetch_token(w3, address: str):
     """Fetch ERC20 metadata via web3scout's FetchToken.
 

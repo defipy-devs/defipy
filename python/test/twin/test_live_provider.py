@@ -24,8 +24,8 @@ tiny — V2-implementation coverage lives in test_live_provider_v2.py,
 V3 in test_live_provider_v3.py, and live-RPC verification in the
 *_live.py companions.
 
-After Phase 2 (V3 LiveProvider lands), the only protocols that still
-raise NotImplementedError are balancer + stableswap (v2.2+).
+After v2.2 Phase 2 (Balancer LiveProvider lands), the only protocol
+that still raises NotImplementedError is stableswap (v2.2 Phase 3).
 """
 
 import pytest
@@ -63,14 +63,14 @@ def test_live_provider_module_does_not_import_web3():
 # ─── Phase-boundary error messages ─────────────────────────────────────────
 
 
-def test_balancer_and_stableswap_pool_ids_raise_not_implemented_v22():
-    """Balancer + Stableswap LiveProviders are v2.2+ work."""
-    for protocol in ("balancer", "stableswap"):
-        with pytest.raises(NotImplementedError) as excinfo:
-            LiveProvider("http://x").snapshot("{}:0xabc".format(protocol))
-        msg = str(excinfo.value)
-        assert "v2.2" in msg, (
-            "Expected v2.2 reference for {} protocol; got {!r}"
-            .format(protocol, msg)
-        )
-        assert "MockProvider" in msg
+def test_stableswap_pool_id_raises_not_implemented_v22():
+    """Stableswap LiveProvider is v2.2 Phase 3 work; Balancer landed in
+    Phase 2 and no longer raises here."""
+    with pytest.raises(NotImplementedError) as excinfo:
+        LiveProvider("http://x").snapshot("stableswap:0xabc")
+    msg = str(excinfo.value)
+    assert "v2.2" in msg, (
+        "Expected v2.2 reference for stableswap protocol; got {!r}"
+        .format(msg)
+    )
+    assert "MockProvider" in msg

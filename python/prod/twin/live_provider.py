@@ -229,10 +229,7 @@ class LiveProvider(StateTwinProvider):
                 kwargs.get("upr_tick", None),
             )
         if protocol == _PROTO_BALANCER:
-            raise NotImplementedError(
-                "LiveProvider Balancer reads are v2.2+ work. For now, "
-                "use MockProvider.snapshot('eth_dai_balancer_50_50')."
-            )
+            return self._snapshot_balancer(address, block_number)
         if protocol == _PROTO_STABLESWAP:
             raise NotImplementedError(
                 "LiveProvider Stableswap reads are v2.2+ work. For now, "
@@ -481,6 +478,86 @@ class LiveProvider(StateTwinProvider):
             tick_spacing = tick_spacing,
             lwr_tick = lwr_tick,
             upr_tick = upr_tick,
+            block_number = block_number,
+            timestamp = timestamp,
+            chain_id = chain_id,
+        )
+
+    # ─── Balancer snapshot ───────────────────────────────────────────────────
+
+    def _snapshot_balancer(self, pool_address, block_number):
+        from defipy.twin import _rpc
+        from defipy.twin.snapshot import BalancerPoolSnapshot
+
+        client = self._get_client()
+        w3 = client.get_w3()
+
+        # R1 — block consistency. Same discipline as V2/V3. Both round
+        # trips below pin to this block.
+        if block_number is None:
+            block_number = client.block_number()
+
+        addr = w3.to_checksum_address(pool_address)
+        chain_id = client.chain_id()
+
+        # RT1 — no-arg pool reads + block timestamp, one pinned batch.
+        # Balancer token balances live on the Vault keyed by poolId, so
+        # they need a second round trip (poolId isn't known until RT1
+        # returns — can't fold into one batch).
+        rt1_calls = [
+            (addr, "getPoolId()", [], [], ["bytes32"]),
+            (addr, "getVault()", [], [], ["address"]),
+            (addr, "getNormalizedWeights()", [], [], ["uint256[]"]),
+            (_rpc.MULTICALL3_ADDRESS, "getCurrentBlockTimestamp()", [], [], ["uint256"]),
+        ]
+        pool_id, vault_addr, norm_weights, timestamp = _rpc.multicall_aggregate3_args(
+            w3, rt1_calls, block_number,
+        )
+        timestamp = int(timestamp)
+
+        # RT2 — balances live on the Vault, keyed by poolId. Single
+        # arg-bearing call; the one-element list unpacks via trailing
+        # comma to the (tokens, balances, lastChangeBlock) 3-tuple.
+        (tokens, balances, _last_change), = _rpc.multicall_aggregate3_args(
+            w3,
+            [(w3.to_checksum_address(vault_addr), "getPoolTokens(bytes32)",
+              ["bytes32"], [pool_id],
+              ["address[]", "uint256[]", "uint256"])],
+            block_number,
+        )
+
+        # v2.2 scope: 2-asset weighted pools only (matches the snapshot
+        # and balancerpy's BalancerImpLoss scope).
+        if len(tokens) != 2:
+            raise NotImplementedError(
+                "LiveProvider Balancer: v2.2 supports 2-asset weighted "
+                "pools only; pool {} has {} tokens."
+                .format(pool_address, len(tokens))
+            )
+
+        # On-chain normalized weights are 1e18-scaled and sum to exactly
+        # 1e18. Read both honestly (don't derive weight1 = 1 - weight0);
+        # the float sum lands within BalancerPoolSnapshot's 1e-9 tol.
+        weight0 = int(norm_weights[0]) / 1e18
+        weight1 = int(norm_weights[1]) / 1e18
+
+        # Token metadata at "latest" — same caveat as V2/V3. eth_abi
+        # decodes addresses lowercased; re-checksum before FetchToken.
+        tkn0 = _rpc.fetch_token(w3, w3.to_checksum_address(tokens[0]))
+        tkn1 = _rpc.fetch_token(w3, w3.to_checksum_address(tokens[1]))
+
+        # C2 — decimal-adjusted floats in whole-token units.
+        reserve0 = _rpc.amt_to_decimal(tkn0, int(balances[0]))
+        reserve1 = _rpc.amt_to_decimal(tkn1, int(balances[1]))
+
+        return BalancerPoolSnapshot(
+            pool_id = pool_address,
+            token0_name = tkn0.token_name,
+            token1_name = tkn1.token_name,
+            reserve0 = reserve0,
+            reserve1 = reserve1,
+            weight0 = weight0,
+            weight1 = weight1,
             block_number = block_number,
             timestamp = timestamp,
             chain_id = chain_id,
