@@ -10,6 +10,17 @@ Underneath, DeFiPy is modular by protocol:
 
 For onchain event access and scripting, use [LiveProvider](https://defipy.org/live-provider/) as of v2.1 — it pulls live pool state into the same primitive surface that runs against synthetic recipes. Under the hood it's powered by [Web3Scout](https://github.com/defipy-devs/web3scout); install via the `[chain]` extra (see below). For details on architecture behind [State Twins](https://defipy.org/twin-concept/), see paper [![arXiv](https://img.shields.io/badge/arXiv-2605.11522-b31b1b.svg)](https://arxiv.org/abs/2605.11522) 
 
+## 🆕 What's new in v2.2
+
+v2.2 extends `LiveProvider` from Uniswap V2/V3 to **Balancer** and **Curve-style Stableswap** — chain reads now cover all four protocol families through the same `provider.snapshot(...)` → `StateTwinBuilder().build(...)` flow.
+
+* **Balancer LiveProvider** — `provider.snapshot("balancer:0xADDR")` builds a `BalancerPoolSnapshot` from a real Balancer V2 weighted pool (2-asset). Two block-pinned round trips, since token balances live on the Vault keyed by `poolId`. Normalized weights read honestly; reserves decimal-adjusted.
+* **Stableswap LiveProvider** — `provider.snapshot("stableswap:0xADDR")` builds an N-coin `StableswapPoolSnapshot` (N ∈ {2, 3}, e.g. the DAI/USDC/USDT 3pool) from a real Curve plain pool. Coin count comes from an `n_coins` hint or an automatic `coins(0..K)` probe; plain pools only.
+* **`multicall_aggregate3_args`** — an argument-bearing Multicall3 batch (encodes calldata args, optional `allow_failure`) powering the Balancer/Curve reads alongside the no-arg getters, all block-pinned. The existing no-arg `multicall_aggregate3` and the V3 path are unchanged.
+* **web3scout `>= 1.0.0`** — the `[chain]` / `[book]` / `[agentic]` extras now pin web3scout 1.0, which carries the Balancer/Curve read ABIs.
+
+See the [CHANGELOG](./CHANGELOG.md) for the full v2.2 entry. v2.2 is a strict superset of v2.1.
+
 ## 🆕 What's new in v2.1
 
 v2.1 makes the [State Twin](https://defipy.org/twin-concept/) **real** — the substrate formalized in [our arXiv paper](https://arxiv.org/abs/2605.11522). `LiveProvider` ships for Uniswap V2 and V3 — chain reads compose with every primitive in the library, the same way `MockProvider` recipes do. The "what would happen if?" loop is now local: pull state once, simulate forever, decide before executing.
@@ -25,14 +36,14 @@ v2.1 makes the [State Twin](https://defipy.org/twin-concept/) **real** — the s
 
 V2.1 is a strict superset of v2.0 — every v2.0 primitive, MockProvider recipe, and MCP server pattern works identically. What changes is that the same primitives now run against live chain state without changing call shape.
 
-**What's deferred to v2.2:** Balancer and Stableswap LiveProvider implementations raise `NotImplementedError` pointing at the planned version. V3 tick bitmap walking is also v2.2 work; in v2.1, V3 LiveProvider snapshots cover active-liquidity only — primitives that depend on non-active-tick liquidity (e.g., `AssessLiquidityDepth`) ship in v2.2.
+**What was deferred to v2.2 (now shipped):** Balancer and Stableswap LiveProvider reads landed in v2.2 (see above). Still open: V3 tick bitmap walking — V3 LiveProvider snapshots cover active-liquidity only, so primitives that depend on non-active-tick liquidity (e.g., `AssessLiquidityDepth`) and N-asset Balancer / rate-bearing Curve pools remain future work.
 
 ## v2.0 foundations
 
 The State Twin abstraction, agentic primitives, and MCP server pattern shipped in v2.0. v2.1 builds on that surface without changing it:
 
 * **`defipy.tools`** — self-describing schemas for a curated set of 10 leaf primitives, in [Model Context Protocol](https://modelcontextprotocol.io) (MCP) format. Any MCP-compatible client can discover and invoke DeFiPy primitives as tools.
-* **`defipy.twin`** — the **State Twin** abstraction. `MockProvider` ships four canonical synthetic pools (V2, V3, Balancer, Stableswap) for notebooks and tests; `LiveProvider` ships chain reads for V2 and V3 in v2.1.
+* **`defipy.twin`** — the **State Twin** abstraction. `MockProvider` ships four canonical synthetic pools (V2, V3, Balancer, Stableswap) for notebooks and tests; `LiveProvider` ships chain reads for all four families (V2/V3 in v2.1, Balancer/Stableswap in v2.2).
 * **MCP server demo** at [`python/mcp/`](./python/mcp/) — a stdio-transport server exposing DeFiPy's tools to Claude Desktop, Claude Code, or any MCP client. Install with `pip install defipy[mcp]` and see the [MCP server README](./python/mcp/README.md) for setup.
 
 ### What is MCP?
@@ -119,16 +130,6 @@ To run the MCP server that exposes DeFiPy's primitives as tools to Claude Deskto
 ```
 
 This adds the [`mcp`](https://github.com/modelcontextprotocol/python-sdk) Python SDK on top of the core install. The MCP server itself lives at [`python/mcp/defipy_mcp_server.py`](./python/mcp/defipy_mcp_server.py); see [`python/mcp/README.md`](./python/mcp/README.md) for Claude Desktop and Claude Code configuration snippets.
-
-### Book install (chapter 9 agents)
-
-Chapter 9 of *Hands-On AMMs with Python* — *Building Autonomous DeFi Agents* — uses live chain integration via `web3scout`. To run those examples, install the `[book]` extra:
-
-```
-> pip install 'defipy[book]'
-```
-
-The `[book]` extra carries the same package set as `[chain]` (`web3scout` + `web3`). The split is intent-based — `[chain]` signals production live-state reads via LiveProvider; `[book]` signals textbook chapter 9 use. Either works for either purpose.
 
 ### Anvil install (local Foundry workflows)
 

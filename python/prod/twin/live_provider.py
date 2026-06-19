@@ -18,9 +18,10 @@
 
 """LiveProvider — chain-reading State Twin provider.
 
-v2.1 Phase 1 ships Uniswap V2 reads. V3 is Phase 2; Balancer and
-Stableswap are v2.2+. Calls for those protocols raise
-NotImplementedError pointing at the relevant phase / version.
+As of v2.2 the read path covers all four protocol families — Uniswap
+V2/V3 (v2.1) and Balancer V2 weighted + Curve plain Stableswap (v2.2).
+An unknown protocol prefix raises ValueError; a known but unsupported
+pool shape (e.g. a 3-asset Balancer pool) raises NotImplementedError.
 
 Importing this module does NOT pull web3 or web3scout. Both come in
 through the lazy `_rpc.make_client()` path inside `.snapshot()`. This
@@ -65,7 +66,8 @@ _KNOWN_PROTOCOLS = (_PROTO_V2, _PROTO_V3, _PROTO_BALANCER, _PROTO_STABLESWAP)
 class LiveProvider(StateTwinProvider):
     """Chain-reading State Twin provider.
 
-    v2.1 Phase 1: Uniswap V2 only.
+    Supports Uniswap V2/V3, Balancer V2 weighted (2-asset), and Curve
+    plain Stableswap (N-coin) reads as of v2.2.
 
     Construction
     ------------
@@ -86,8 +88,8 @@ class LiveProvider(StateTwinProvider):
 
     Address casing is normalized internally — lowercase, uppercase,
     or checksum-mixed all work. The protocol prefix selects the read
-    path; v2.1 Phase 1 supports `uniswap_v2`. Other protocols raise
-    NotImplementedError pointing at the relevant phase/version.
+    path; supported prefixes are `uniswap_v2`, `uniswap_v3`,
+    `balancer`, and `stableswap`. An unknown prefix raises ValueError.
 
     Block pinning
     -------------
@@ -193,19 +195,24 @@ class LiveProvider(StateTwinProvider):
         ----------
         pool_id : str
             "<protocol>:<address>" format. Protocol must be one of:
-            "uniswap_v2" (Phase 1), "uniswap_v3" (Phase 2),
-            "balancer" / "stableswap" (v2.2+).
+            "uniswap_v2", "uniswap_v3", "balancer", "stableswap".
         **kwargs
             block_number : int | None
                 Specific block to read. Default: resolves "latest" to
                 a concrete block once at the start of the snapshot.
+            lwr_tick / upr_tick : int | None
+                uniswap_v3 only — override the full-range tick default.
+            n_coins : int | None
+                stableswap only — coin count hint; skips the
+                coins(0..K) probe when supplied.
 
         Returns
         -------
         PoolSnapshot
-            For uniswap_v2: a `V2PoolSnapshot` with `reserve0` /
-            `reserve1` as decimal-adjusted floats (raw / 10**decimals)
-            and `token0_name` / `token1_name` populated from on-chain
+            The protocol-specific snapshot — `V2PoolSnapshot`,
+            `V3PoolSnapshot`, `BalancerPoolSnapshot`, or
+            `StableswapPoolSnapshot`. Reserves are decimal-adjusted
+            floats (raw / 10**decimals); token names come from on-chain
             symbol() reads.
 
         Raises
@@ -213,8 +220,8 @@ class LiveProvider(StateTwinProvider):
         ValueError
             If pool_id is malformed or names an unknown protocol.
         NotImplementedError
-            If pool_id names a known-but-not-yet-implemented protocol
-            (uniswap_v3, balancer, stableswap in Phase 1).
+            If pool_id names a supported protocol but an unsupported
+            pool shape (e.g. a 3-asset Balancer weighted pool).
         """
         protocol, address = self._parse_pool_id(pool_id)
         block_number = kwargs.get("block_number", None)
@@ -231,9 +238,8 @@ class LiveProvider(StateTwinProvider):
         if protocol == _PROTO_BALANCER:
             return self._snapshot_balancer(address, block_number)
         if protocol == _PROTO_STABLESWAP:
-            raise NotImplementedError(
-                "LiveProvider Stableswap reads are v2.2+ work. For now, "
-                "use MockProvider.snapshot('usdc_dai_stableswap_A10')."
+            return self._snapshot_stableswap(
+                address, block_number, kwargs.get("n_coins", None),
             )
         # _parse_pool_id guards above; unreachable if reached.
         raise ValueError(
@@ -562,3 +568,93 @@ class LiveProvider(StateTwinProvider):
             timestamp = timestamp,
             chain_id = chain_id,
         )
+
+    # ─── Stableswap snapshot ─────────────────────────────────────────────────
+
+    def _snapshot_stableswap(self, pool_address, block_number, n_coins):
+        from defipy.twin import _rpc
+        from defipy.twin.snapshot import StableswapPoolSnapshot
+
+        client = self._get_client()
+        w3 = client.get_w3()
+
+        # R1 — block consistency. The probe (if used) and the main read
+        # both pin to this block.
+        if block_number is None:
+            block_number = client.block_number()
+
+        addr = w3.to_checksum_address(pool_address)
+        chain_id = client.chain_id()
+
+        # Curve plain pools bake N_COINS in with no universal getter:
+        # take the caller's hint, else probe coins(0..K) and count the
+        # leading non-reverting run.
+        if n_coins is None:
+            n_coins = self._probe_curve_coin_count(w3, addr, block_number)
+
+        # Main read — A(), coins(i)/balances(i) per coin, block
+        # timestamp, one pinned batch. A() is the human amplification
+        # coefficient (matches stableswappy's A); do not read A_precise().
+        calls = [(addr, "A()", [], [], ["uint256"])]
+        for i in range(n_coins):
+            calls.append((addr, "coins(uint256)", ["uint256"], [i], ["address"]))
+            calls.append((addr, "balances(uint256)", ["uint256"], [i], ["uint256"]))
+        calls.append(
+            (_rpc.MULTICALL3_ADDRESS, "getCurrentBlockTimestamp()", [], [], ["uint256"])
+        )
+        results = _rpc.multicall_aggregate3_args(w3, calls, block_number)
+
+        A_human = int(results[0])
+        coin_addrs = [results[1 + 2 * i] for i in range(n_coins)]
+        balances_raw = [int(results[2 + 2 * i]) for i in range(n_coins)]
+        timestamp = int(results[-1])
+
+        # Per-token metadata at "latest" (same caveat as V2/V3/Balancer).
+        # reserves decimal-adjusted to human floats; decimals stays the
+        # scalar 18 on the snapshot — decimals-invariant for plain pools
+        # (rate normalization), so a real USDC(6)/USDT(6)/DAI(18) pool
+        # reproduces on-chain economics built uniformly at 18.
+        token_names = []
+        reserves = []
+        for coin_addr, bal_raw in zip(coin_addrs, balances_raw):
+            tkn = _rpc.fetch_token(w3, w3.to_checksum_address(coin_addr))
+            token_names.append(tkn.token_name)
+            reserves.append(_rpc.amt_to_decimal(tkn, bal_raw))
+
+        return StableswapPoolSnapshot(
+            pool_id = pool_address,
+            token_names = token_names,
+            reserves = reserves,
+            A = A_human,
+            decimals = 18,
+            block_number = block_number,
+            timestamp = timestamp,
+            chain_id = chain_id,
+        )
+
+    def _probe_curve_coin_count(self, w3, addr, block_number, max_coins = 8):
+        """Probe coins(0..K) via an allow_failure multicall and count the
+        leading non-reverting run. Plain Curve pools have no universal
+        N_COINS() getter, so this is the fallback when the caller doesn't
+        pass an n_coins hint. The one place Phase 1's None-slot path is
+        exercised."""
+        from defipy.twin import _rpc
+        calls = [
+            (addr, "coins(uint256)", ["uint256"], [i], ["address"])
+            for i in range(max_coins)
+        ]
+        results = _rpc.multicall_aggregate3_args(
+            w3, calls, block_number, allow_failure = True,
+        )
+        n = 0
+        for r in results:
+            if r is None:
+                break
+            n += 1
+        if n < 2:
+            raise ValueError(
+                "LiveProvider Stableswap: probed {} coins at {}; expected "
+                ">= 2. Pass n_coins= explicitly if this pool's coins() "
+                "reverts unusually.".format(n, addr)
+            )
+        return n

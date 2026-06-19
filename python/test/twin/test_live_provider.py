@@ -24,8 +24,9 @@ tiny — V2-implementation coverage lives in test_live_provider_v2.py,
 V3 in test_live_provider_v3.py, and live-RPC verification in the
 *_live.py companions.
 
-After v2.2 Phase 2 (Balancer LiveProvider lands), the only protocol
-that still raises NotImplementedError is stableswap (v2.2 Phase 3).
+As of v2.2 (Balancer + Stableswap LiveProvider landed), all four
+protocols — uniswap_v2, uniswap_v3, balancer, stableswap — are
+implemented; only an unknown protocol prefix raises (ValueError).
 """
 
 import pytest
@@ -60,17 +61,13 @@ def test_live_provider_module_does_not_import_web3():
     assert "web3scout" not in dir(lp_module)
 
 
-# ─── Phase-boundary error messages ─────────────────────────────────────────
+# ─── Protocol dispatch ──────────────────────────────────────────────────────
 
 
-def test_stableswap_pool_id_raises_not_implemented_v22():
-    """Stableswap LiveProvider is v2.2 Phase 3 work; Balancer landed in
-    Phase 2 and no longer raises here."""
-    with pytest.raises(NotImplementedError) as excinfo:
-        LiveProvider("http://x").snapshot("stableswap:0xabc")
-    msg = str(excinfo.value)
-    assert "v2.2" in msg, (
-        "Expected v2.2 reference for stableswap protocol; got {!r}"
-        .format(msg)
-    )
-    assert "MockProvider" in msg
+def test_unknown_protocol_raises_value_error():
+    """All four protocols (v2/v3/balancer/stableswap) are implemented as
+    of v2.2; only an unknown prefix raises — a ValueError before any
+    chain reads."""
+    with pytest.raises(ValueError) as excinfo:
+        LiveProvider("http://x").snapshot("curve_v3:0xabc")
+    assert "unknown protocol" in str(excinfo.value).lower()

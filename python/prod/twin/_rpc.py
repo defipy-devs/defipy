@@ -370,6 +370,17 @@ def load_balancer_vault_contract(w3, address: str):
     return ABILoad(PlatformsEnum.BALANCER, "Vault").apply(w3, address)
 
 
+def load_curve_pool_contract(w3, address: str):
+    """Load a Curve plain Stableswap pool proxy via web3scout's ABI
+    bundle. Like the V3/Balancer loaders, the snapshot read goes through
+    Multicall3 with raw selectors; this exists for symmetry and for
+    direct calls / live debugging.
+    """
+    from web3scout.abi.abi_load import ABILoad
+    from web3scout.enums.platforms_enum import PlatformsEnum
+    return ABILoad(PlatformsEnum.CURVE, "StableSwap").apply(w3, address)
+
+
 def fetch_token(w3, address: str):
     """Fetch ERC20 metadata via web3scout's FetchToken.
 

@@ -188,6 +188,48 @@ class BalancerPoolSpec:
         )
 
 
+@dataclass
+class CurvePoolSpec:
+    """Canned response set for a single Curve plain Stableswap pool.
+
+    v2.2 Phase 3 — the pool answers `A()` / `fee()` (no-arg) and
+    `coins(i)` / `balances(i)` (index-arg). `N_COINS` has no universal
+    getter on plain pools, so `coins(i)` for `i >= len(coin_addresses)`
+    must revert (the fake returns (False, b"")), which is what lets the
+    allow_failure coin-count probe stop at the right count.
+
+    `balances_raw` are RAW uint balances (what balances(i) returns
+    on-chain); LiveProvider does the decimal scaling.
+    """
+    address: str
+    coin_addresses: list    # 2 or 3 token addresses, in coin-index order
+    balances_raw: list      # raw uints, parallel to coin_addresses
+    A: int = 10
+    fee: int = 4_000_000    # Curve fee is 1e10-scaled; opaque to the read
+
+    @classmethod
+    def from_human(cls, *, address, coin_addresses, balances, decimals, A=10,
+                   fee=4_000_000):
+        """Build a spec from human balances + per-token decimals.
+
+        `balances` and `decimals` are lists parallel to
+        `coin_addresses`. Scaling goes through Decimal so a round human
+        amount round-trips exactly (see BalancerPoolSpec.from_human).
+        """
+        from decimal import Decimal
+        balances_raw = [
+            int(Decimal(str(bal)) * (10**dec))
+            for bal, dec in zip(balances, decimals)
+        ]
+        return cls(
+            address = address,
+            coin_addresses = list(coin_addresses),
+            balances_raw = balances_raw,
+            A = A,
+            fee = fee,
+        )
+
+
 # ─── FakeContract / FakeFunctions ──────────────────────────────────────────
 
 
@@ -317,6 +359,28 @@ class _BalancerPoolFunctions:
         )
 
 
+class _CurvePoolFunctions:
+    """No-arg functions surface for a Curve plain pool: A() / fee().
+
+    The index-arg reads coins(i)/balances(i) are NOT here — they share
+    one selector across all indices, so _BoundAggregate3 decodes the
+    index from calldata and dispatches them directly against the spec.
+    """
+
+    def __init__(self, pool: "CurvePoolSpec", recorder, address: str):
+        self._pool = pool
+        self._recorder = recorder
+        self._address = address
+
+    def A(self):
+        return _BoundCall(self._recorder, self._address, "A",
+                          lambda: self._pool.A)
+
+    def fee(self):
+        return _BoundCall(self._recorder, self._address, "fee",
+                          lambda: self._pool.fee)
+
+
 class _ERC20Functions:
     """Functions surface for an ERC20: symbol/decimals/name/totalSupply."""
 
@@ -395,6 +459,12 @@ def _ensure_dispatch():
         _selector("getPoolTokens(bytes32)"): (
             "getPoolTokens", ["address[]", "uint256[]", "uint256"],
         ),
+        # Curve plain Stableswap (v2.2 Phase 3). A()/fee() are no-arg;
+        # coins(uint256)/balances(uint256) are index-arg — _BoundAggregate3
+        # decodes the index from calldata and dispatches per-index.
+        _selector("A()"): ("A", ["uint256"]),
+        _selector("coins(uint256)"): ("coins", ["address"]),
+        _selector("balances(uint256)"): ("balances", ["uint256"]),
     })
     _MULTICALL3_TIMESTAMP_SELECTOR = _selector("getCurrentBlockTimestamp()")
 
@@ -471,6 +541,27 @@ class _BoundAggregate3:
                 continue
 
             fn_name, return_types = _DISPATCH[selector]
+
+            # Index-arg Curve reads: coins(i)/balances(i) share one
+            # selector across all indices, so decode the index from
+            # call_data[4:] and return the i-th element. An out-of-range
+            # index is a genuine revert ((False, b"")) — this is what
+            # lets the allow_failure coin-count probe stop at N.
+            if fn_name in ("coins", "balances"):
+                from eth_abi import decode as _decode
+                index = _decode(["uint256"], bytes(call_data[4:]))[0]
+                value = self._dispatch_curve_indexed(target, fn_name, index)
+                if value is None:
+                    results.append((False, b""))
+                    continue
+                self._recorder.append(CallRecord(
+                    address = target,
+                    function = fn_name,
+                    block_identifier = block_identifier,
+                ))
+                results.append((True, encode(return_types, [value])))
+                continue
+
             value = self._dispatch_to_spec(target, fn_name)
             self._recorder.append(CallRecord(
                 address = target,
@@ -510,6 +601,12 @@ class _BoundAggregate3:
                 return _BalancerPoolFunctions(
                     spec, [], target,
                 ).__getattribute__(fn_name)()._value_fn()
+            if isinstance(spec, CurvePoolSpec):
+                # No-arg Curve reads only (A/fee); coins/balances are
+                # handled per-index in call() before reaching here.
+                return _CurvePoolFunctions(
+                    spec, [], target,
+                ).__getattribute__(fn_name)()._value_fn()
         # Token spec match — ERC20.
         if target in self._fake_w3._token_specs:
             return _ERC20Functions(
@@ -524,6 +621,22 @@ class _BoundAggregate3:
                 list(self._fake_w3._token_specs.keys()),
             )
         )
+
+    def _dispatch_curve_indexed(self, target, fn_name, index):
+        """coins(i)/balances(i) against a CurvePoolSpec at `target`.
+        Returns None for an out-of-range index — a genuine on-chain
+        revert, which the coin-count probe relies on to stop at N."""
+        spec = self._fake_w3._pool_specs.get(target)
+        if not isinstance(spec, CurvePoolSpec):
+            raise KeyError(
+                "FakeMulticall: coins/balances against non-Curve target "
+                "{!r}".format(target)
+            )
+        if index >= len(spec.coin_addresses):
+            return None
+        if fn_name == "coins":
+            return spec.coin_addresses[index]
+        return spec.balances_raw[index]
 
 
 class _BoundCall:
@@ -771,15 +884,25 @@ def build_fake_client(
         fake._pool_specs[pool.address] = pool
         fake._pool_specs[pool.vault_address] = pool
         fake._multicall_mounted = True
+    elif isinstance(pool, CurvePoolSpec):
+        # Curve reads go through Multicall3 (A/coins(i)/balances(i) +
+        # timestamp, plus the optional coin-count probe). Register at the
+        # pool address; coins/balances dispatch per-index against it.
+        fake._pool_specs[pool.address] = pool
+        fake._multicall_mounted = True
     else:
         raise TypeError(
-            "build_fake_client: pool must be V2PoolSpec or V3PoolSpec; "
-            "got {}".format(type(pool).__name__)
+            "build_fake_client: pool must be V2PoolSpec, V3PoolSpec, "
+            "BalancerPoolSpec, or CurvePoolSpec; got {}"
+            .format(type(pool).__name__)
         )
     for token in tokens:
         fake._token_specs[token.address] = token
-    # Sanity check: pool's token addrs must have matching specs.
-    referenced = {pool.token0_address, pool.token1_address}
+    # Sanity check: the pool's referenced token addrs must have specs.
+    if isinstance(pool, CurvePoolSpec):
+        referenced = set(pool.coin_addresses)
+    else:
+        referenced = {pool.token0_address, pool.token1_address}
     provided = {t.address for t in tokens}
     missing = referenced - provided
     if missing:
@@ -925,4 +1048,68 @@ def canonical_bal_weth_token_specs() -> list:
     return [
         TokenSpec(address=BAL_ADDRESS, symbol="BAL", decimals=18),
         TokenSpec(address=WETH_ADDRESS, symbol="WETH", decimals=18),
+    ]
+
+
+# ─── Canonical Curve pool fixtures: USDC/DAI 2-coin + DAI/USDC/USDT 3pool ──
+#
+# Per the Phase 3 handoff: the DAI/USDC/USDT 3pool is the canonical
+# plain Stableswap pool. A 2-coin USDC/DAI spec mirrors stableswap_setup
+# for exact builder parity. Native decimals (DAI 18, USDC/USDT 6) so the
+# read path's decimal adjustment is exercised.
+
+CURVE_3POOL = "0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7"
+DAI_ADDRESS = "0x6B175474E89094C44Da98b954EedeAC495271d0F"     # 18 dec
+USDT_ADDRESS = "0xdAC17F958D2ee523a2206206994597C13D831ec7"    # 6 dec
+# USDC_ADDRESS (6 dec) is defined in the V2 fixture section above.
+
+
+def canonical_usdc_dai_curve_spec(
+    *,
+    usdc_amount: float = 100_000.0,
+    dai_amount: float = 100_000.0,
+    A: int = 10,
+) -> CurvePoolSpec:
+    """2-coin USDC/DAI plain pool. coin0 = USDC (6dec), coin1 = DAI
+    (18dec) — matches stableswap_setup's token insertion order for
+    builder parity."""
+    return CurvePoolSpec.from_human(
+        address = CURVE_3POOL,   # reuse the pool address as an opaque id
+        coin_addresses = [USDC_ADDRESS, DAI_ADDRESS],
+        balances = [usdc_amount, dai_amount],
+        decimals = [6, 18],
+        A = A,
+    )
+
+
+def canonical_3pool_curve_spec(
+    *,
+    dai_amount: float = 200_000_000.0,
+    usdc_amount: float = 200_000_000.0,
+    usdt_amount: float = 200_000_000.0,
+    A: int = 2000,
+) -> CurvePoolSpec:
+    """3-coin DAI/USDC/USDT plain pool (the canonical Curve 3pool).
+    coin0 = DAI (18dec), coin1 = USDC (6dec), coin2 = USDT (6dec)."""
+    return CurvePoolSpec.from_human(
+        address = CURVE_3POOL,
+        coin_addresses = [DAI_ADDRESS, USDC_ADDRESS, USDT_ADDRESS],
+        balances = [dai_amount, usdc_amount, usdt_amount],
+        decimals = [18, 6, 6],
+        A = A,
+    )
+
+
+def canonical_usdc_dai_curve_token_specs() -> list:
+    return [
+        TokenSpec(address=USDC_ADDRESS, symbol="USDC", decimals=6),
+        TokenSpec(address=DAI_ADDRESS, symbol="DAI", decimals=18),
+    ]
+
+
+def canonical_3pool_curve_token_specs() -> list:
+    return [
+        TokenSpec(address=DAI_ADDRESS, symbol="DAI", decimals=18),
+        TokenSpec(address=USDC_ADDRESS, symbol="USDC", decimals=6),
+        TokenSpec(address=USDT_ADDRESS, symbol="USDT", decimals=6),
     ]

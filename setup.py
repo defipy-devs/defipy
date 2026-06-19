@@ -4,13 +4,14 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
-      # 2.1.0: State Twin Completion cycle complete. V2+V3 LiveProvider,
-      # Multicall3 batching, PoolSnapshot enrichment, get_w3() escape
-      # hatch, PoolHealth ergonomics for V3, fork-and-evaluate worked
-      # example. Phases 1-3 of STATE_TWIN_COMPLETION_PLAN.md all
-      # shipped. Substrate is feature-complete for v2.1; v2.2 work is
-      # demand-driven.
-      version='2.1.0',
+      # 2.2.0: Balancer & Stableswap LiveProvider. Arg-bearing Multicall3
+      # helper (multicall_aggregate3_args), Balancer V2 weighted-pool
+      # reads (2-asset), Curve plain-pool reads (N-coin, with coin-count
+      # probe), N>=2 StableswapPoolSnapshot. web3scout pinned to >=1.0.0
+      # for the Balancer/Curve read ABIs. The LiveProvider read path now
+      # covers V2, V3, Balancer, and Stableswap. Phases 1-3 of
+      # DEFIPY_V2_2_LIVEPROVIDER_SPEC.md all shipped.
+      version='2.2.0',
       description='Python SDK for Agentic DeFi',
       long_description=long_description,
       long_description_content_type="text/markdown",

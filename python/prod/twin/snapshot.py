@@ -155,9 +155,8 @@ class StableswapPoolSnapshot(PoolSnapshot):
                 "have same length; got {} names, {} reserves"
                 .format(len(self.token_names), len(self.reserves))
             )
-        if len(self.token_names) != 2:
+        if len(self.token_names) < 2:
             raise ValueError(
-                "StableswapPoolSnapshot: exactly 2 tokens required in v1 "
-                "(StableswapImpLoss scope); got {}"
+                "StableswapPoolSnapshot: at least 2 tokens required; got {}"
                 .format(len(self.token_names))
             )

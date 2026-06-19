@@ -165,14 +165,27 @@ def test_stableswap_snapshot_rejects_mismatched_lengths():
     assert "length" in str(excinfo.value).lower()
 
 
-def test_stableswap_snapshot_rejects_non_2_asset():
+def test_stableswap_snapshot_accepts_3_tokens():
+    """v2.2 Phase 3 widened the guard to N >= 2; the canonical 3pool
+    (DAI/USDC/USDT) constructs."""
+    s = StableswapPoolSnapshot(
+        pool_id = "p",
+        token_names = ["DAI", "USDC", "USDT"],
+        reserves = [1, 1, 1],
+        A = 2000,
+    )
+    assert s.token_names == ["DAI", "USDC", "USDT"]
+    assert len(s.reserves) == 3
+
+
+def test_stableswap_snapshot_rejects_single_token():
     with pytest.raises(ValueError) as excinfo:
         StableswapPoolSnapshot(
             pool_id = "p",
-            token_names = ["USDC", "DAI", "USDT"],
-            reserves = [1, 1, 1],
+            token_names = ["USDC"],
+            reserves = [1],
         )
-    assert "2" in str(excinfo.value)
+    assert "at least 2" in str(excinfo.value)
 
 
 # ─── Chain-context enrichment defaults (Phase 2 C5) ─────────────────────────

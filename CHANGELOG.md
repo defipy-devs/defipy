@@ -10,6 +10,66 @@ and the GitHub releases page.
 
 ---
 
+## [2.2.0] — 2026-06-18
+
+The "Balancer & Stableswap LiveProvider" cycle. v2.2 extends the
+LiveProvider read path from V2/V3 to Balancer V2 weighted pools and
+Curve plain Stableswap pools — the same `provider.snapshot(...)` →
+`StateTwinBuilder().build(...)` flow, now across all four protocol
+families. Read path only: the snapshots, builders, and math were
+already in place.
+
+### Added
+
+- **`multicall_aggregate3_args`** (`twin/_rpc.py`) — an argument-bearing
+  sibling to `multicall_aggregate3`. ABI-encodes calldata args, so it
+  serves `getPoolTokens(bytes32)`, `coins(uint256)`, `balances(uint256)`
+  and the no-arg getters through one block-pinned `Multicall3.aggregate3`
+  path. Optional `allow_failure` returns `None` in a sub-call's slot
+  instead of reverting the batch (used by the Curve coin-count probe).
+  The no-arg helper and the V3 read path are untouched.
+- **Balancer LiveProvider** — `provider.snapshot("balancer:0xADDR")`
+  builds a `BalancerPoolSnapshot` from a real Balancer V2 weighted pool.
+  Two block-pinned round trips: pool `getPoolId`/`getVault`/
+  `getNormalizedWeights` + timestamp, then the Vault's
+  `getPoolTokens(poolId)` (balances live on the Vault, keyed by poolId).
+  Normalized weights read honestly; reserves decimal-adjusted.
+  2-asset weighted pools only — 3-asset raises `NotImplementedError`.
+- **Stableswap LiveProvider** — `provider.snapshot("stableswap:0xADDR")`
+  builds an N-coin `StableswapPoolSnapshot` (N ∈ {2, 3}) from a real
+  Curve plain pool. Reads `A()` + `coins(i)`/`balances(i)` + timestamp
+  in one pinned batch. Coin count comes from an optional `n_coins`
+  kwarg (fast path) or an `allow_failure` `coins(0..K)` probe that
+  counts the leading non-reverting run. Plain pools only (stored_rate
+  = 1); `A()` not `A_precise()`.
+- **N-coin `StableswapPoolSnapshot`** — the schema guard widened from
+  exactly-2 to at-least-2 tokens. `_build_stableswap` was already
+  N-safe. `decimals` stays scalar 18 (decimals-invariant for plain
+  pools). 1-token snapshots still raise.
+- **Balancer / Curve contract loaders** (`twin/_rpc.py`) —
+  `load_balancer_pool_contract`, `load_balancer_vault_contract`,
+  `load_curve_pool_contract` over web3scout's ABI bundle, for symmetry
+  / direct calls / live debugging.
+
+### Changed
+
+- **web3scout pinned to `>= 1.0.0`** in the `chain` / `book` / `agentic`
+  extras (1.0.0 carries the Balancer/Curve read ABIs and platform
+  enums). Was `>= 0.2.0`.
+- Both Balancer and Stableswap `NotImplementedError` stubs in
+  `LiveProvider.snapshot()` are gone. All four protocol prefixes
+  (`uniswap_v2`, `uniswap_v3`, `balancer`, `stableswap`) are
+  implemented; only an unknown prefix raises `ValueError`.
+
+### Notes
+
+- Out of scope for v2.2 (v2.3): N-asset Balancer, rate-bearing Curve
+  pools (metapools, LSD), per-token native decimals on the snapshot,
+  and extending the position/risk primitives (`AnalyzeStableswapPosition`,
+  `AnalyzeBalancerPosition`, `AssessDepegRisk`) beyond 2-asset.
+
+---
+
 ## [2.1.0] — 2026-05-07
 
 The "State Twin Completion" cycle. v2.1 makes the State Twin substrate
