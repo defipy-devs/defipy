@@ -270,11 +270,11 @@ To construct a Uniswap V3 pool directly (outside MockProvider's canonical recipe
 
 ## 🧪 Tests
 
-DeFiPy ships ~686 tests across primitives, tools, twin, packaging, and the MCP server dispatch layer. Run the full suite:
+DeFiPy ships ~766 tests across primitives, tools, twin, packaging, and the MCP server dispatch layer. Run the full suite:
 
     pytest python/test/ -v
 
-Expect ~686 passed and 11 skipped — the skipped tests are the live-RPC suites, gated by the `DEFIPY_LIVE_RPC` environment variable. They run against real mainnet pools and aren't part of the default suite to keep CI deterministic.
+Expect ~742 passed and 24 skipped — the skipped tests are the live-RPC suites, gated by the `DEFIPY_LIVE_RPC` environment variable. They run against real mainnet pools and aren't part of the default suite to keep CI deterministic.
 
 Run just the primitive suite (no MCP or twin dependencies):
 
