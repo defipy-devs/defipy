@@ -25,9 +25,16 @@ from uniswappy.process.swap import Swap
 
 from python.prod.utils.data import RugSignalReport, PoolHealth
 from python.prod.primitives.pool_health import DetectRugSignals
+from python.prod.twin import StateTwinBuilder, V2PoolSnapshot
 
 
 USER = "user0"
+
+# Real blue-chip Uniswap V2 USDC/WETH pool — the pool from the bug
+# report that spuriously flagged "high" risk before the live-snapshot
+# provenance gate.
+_USDC_WETH_V2 = "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc"
+_LIVE_BLOCK = 19_500_000
 
 
 # ─── V2 test suite ───────────────────────────────────────────────────────────
@@ -213,6 +220,85 @@ class TestDetectRugSignalsV3(unittest.TestCase):
         # signal is protocol-agnostic and should fire here too.
         result = self._detect()
         self.assertTrue(result.single_sided_concentration)
+
+
+# ─── Live-snapshot suite ─────────────────────────────────────────────────────
+# Regression for the false-positive "high" verdict on healthy live pools.
+# A twin built from a single-block live snapshot is reconstructed as one
+# synthetic LP with no swap history. DetectRugSignals needs NO change: its
+# existing None-guards (top_lp_share_pct is not None; num_swaps is None)
+# already suppress single_sided_concentration and inactive_with_liquidity
+# once CheckPoolHealth reports those fields as None for a live twin.
+
+class TestDetectRugSignalsLiveSnapshot(unittest.TestCase):
+
+    @pytest.fixture(autouse = True)
+    def _bind_setup(self, v2_setup):
+        """v2_setup flagged live is the analog of the USDC/WETH twin:
+        single synthetic LP, zero swaps, healthy 2000-ETH TVL."""
+        self.setup = v2_setup
+
+    def test_flagged_fixture_drops_to_low_risk(self):
+        self.setup.lp.live_snapshot = True
+        result = DetectRugSignals().apply(self.setup.lp)
+        # Both reconstruction-artifact signals must clear.
+        self.assertFalse(result.single_sided_concentration)
+        self.assertFalse(result.inactive_with_liquidity)
+        # Healthy TVL keeps the floor signal clear too.
+        self.assertFalse(result.tvl_suspiciously_low)
+        self.assertEqual(result.signals_detected, 0)
+        self.assertEqual(result.risk_level, "low")
+        # The inactive note must not mislabel this live V2 read as "V3":
+        # num_swaps is None here because of the live snapshot, not V3.
+        self.assertEqual(result.pool_health.version, "V2")
+        self.assertFalse(any("V3" in d for d in result.details))
+
+    def test_unflagged_fixture_still_fires_two_signals(self):
+        # Identical fixture WITHOUT the live flag keeps the old mock-path
+        # behavior: concentration + inactive fire → "high". Guards the
+        # MockProvider path against regression.
+        result = DetectRugSignals().apply(self.setup.lp)
+        self.assertTrue(result.single_sided_concentration)
+        self.assertTrue(result.inactive_with_liquidity)
+        self.assertEqual(result.signals_detected, 2)
+        self.assertEqual(result.risk_level, "high")
+
+    def test_live_built_usdc_weth_twin_is_low_risk(self):
+        # Faithful reproduction of the bug report: build a live-flagged
+        # V2 twin from a reserves-only snapshot at a real block and run
+        # the full DetectRugSignals read path end to end.
+        snap = V2PoolSnapshot(
+            pool_id = _USDC_WETH_V2,
+            token0_name = "USDC", token1_name = "WETH",
+            reserve0 = 16670066.0, reserve1 = 5000.0,
+            block_number = _LIVE_BLOCK,
+        )
+        lp = StateTwinBuilder().build(snap)
+        result = DetectRugSignals().apply(lp)
+        self.assertEqual(result.risk_level, "low")
+        self.assertFalse(result.single_sided_concentration)
+        self.assertFalse(result.inactive_with_liquidity)
+        # The suppressed metrics are reported as unknown on the snapshot.
+        self.assertIsNone(result.pool_health.top_lp_share_pct)
+        self.assertIsNone(result.pool_health.num_swaps)
+
+    def test_genuinely_drained_pool_still_flags(self):
+        # A live snapshot must not become a blanket "low": a real drain —
+        # tiny TVL below the floor — still fires the TVL signal even
+        # though the LP/swap artifact signals are suppressed.
+        snap = V2PoolSnapshot(
+            pool_id = "0xdrained",
+            token0_name = "USDC", token1_name = "WETH",
+            reserve0 = 5.0, reserve1 = 0.0025,
+            block_number = _LIVE_BLOCK,
+        )
+        lp = StateTwinBuilder().build(snap)
+        # TVL-in-token0 ≈ 10 USDC, well under a 50-floor.
+        result = DetectRugSignals().apply(lp, tvl_floor = 50.0)
+        self.assertTrue(result.tvl_suspiciously_low)
+        self.assertFalse(result.single_sided_concentration)
+        self.assertFalse(result.inactive_with_liquidity)
+        self.assertGreaterEqual(result.signals_detected, 1)
 
 
 if __name__ == '__main__':

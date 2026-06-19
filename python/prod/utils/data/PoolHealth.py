@@ -54,23 +54,30 @@ class PoolHealth:
         (lp.collected_fee0 in human units).
     total_fee1 : float
         Accumulated fees in token1.
-    num_swaps : int
+    num_swaps : Optional[int]
         Number of swaps observed by the pool. V2-only (derived from
         len(fee0_arr)). None for V3, which accumulates feeGrowth
-        rather than per-swap history.
+        rather than per-swap history, and None for any twin built from
+        a single-block live snapshot (no swap replay → history unknown,
+        not zero).
     fee_accrual_rate_recent : Optional[float]
         Average token0 fees per swap over the last recent_window
         swaps. V2-only. None when num_swaps is None or zero.
-    num_lps : int
+    num_lps : Optional[int]
         Distinct liquidity providers currently in the pool. The V2
-        "0" sentinel for MINIMUM_LIQUIDITY burn is excluded.
-    top_lp_share_pct : float
+        "0" sentinel for MINIMUM_LIQUIDITY burn is excluded. None for a
+        twin built from a single-block live snapshot, whose LP-holder
+        distribution can't be recovered from state alone (it's
+        reconstructed as a single synthetic provider).
+    top_lp_share_pct : Optional[float]
         Fraction (0.0–1.0) of total_supply held by the single largest
         LP. A value near 1.0 means the pool is essentially a single-LP
-        pool (concentration risk). None when the pool has no LPs.
+        pool (concentration risk). None when the pool has no LPs, or
+        when the twin came from a live snapshot (distribution unknown).
     has_activity : bool
         True if num_swaps is known and > 0. False for an untouched
-        pool or a V3 pool where swap count isn't tracked.
+        pool, a V3 pool where swap count isn't tracked, or a live
+        snapshot whose swap history is unknown.
     fee_pips : Optional[int]
         V3 fee tier in pips (1/10000ths — e.g. 500 for 0.05%, 3000
         for 0.3%, 10000 for 1%). None for V2 (V2 has a fixed 0.3%
@@ -96,7 +103,7 @@ class PoolHealth:
     total_fee1: float
     num_swaps: Optional[int]
     fee_accrual_rate_recent: Optional[float]
-    num_lps: int
+    num_lps: Optional[int]
     top_lp_share_pct: Optional[float]
     has_activity: bool
     # New in v2.1 Phase 3a — defaults preserve backward compatibility

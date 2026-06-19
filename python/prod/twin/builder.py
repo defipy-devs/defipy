@@ -72,6 +72,36 @@ class StateTwinBuilder:
             .format(type(snapshot).__name__)
         )
 
+    # ─── Provenance tagging ─────────────────────────────────────────────────
+
+    def _tag_provenance(self, lp, s: PoolSnapshot):
+        """Stamp live-vs-synthetic provenance onto a built twin.
+
+        Every twin is reconstructed from a single state read — reserves
+        (plus, for live reads, a block number) — with no swap/event
+        replay and no recovered LP-holder distribution. The twin's LP
+        set is therefore a single synthetic provider and its swap
+        history is empty *by construction*, regardless of the real pool.
+
+        The discriminator for "is this a chain snapshot?" is
+        `s.block_number is not None`: LiveProvider populates block_number
+        from on-chain reads; MockProvider leaves it None by design (see
+        the PoolSnapshot docstring in snapshot.py). When `live_snapshot`
+        is True, downstream consumers MUST treat per-LP concentration and
+        swap-history metrics as unknown rather than reading the synthetic
+        single-provider / empty-history state as ground truth — see
+        CheckPoolHealth, which reports those fields as None for live
+        twins. Mock twins keep `live_snapshot = False` and continue to
+        report concrete values so existing notebook/test behavior is
+        unaffected.
+
+        `snapshot_block_number` carries the block the snapshot was read
+        at (None for mock) so consumers can surface provenance.
+        """
+        lp.live_snapshot = s.block_number is not None
+        lp.snapshot_block_number = s.block_number
+        return lp
+
     # ─── Uniswap V2 ─────────────────────────────────────────────────────────
 
     def _build_v2(self, s: V2PoolSnapshot):
@@ -87,7 +117,7 @@ class StateTwinBuilder:
         )
         lp = factory.deploy(exch_data)
         lp.add_liquidity(_TWIN_USER, s.reserve0, s.reserve1, s.reserve0, s.reserve1)
-        return lp
+        return self._tag_provenance(lp, s)
 
     # ─── Uniswap V3 ─────────────────────────────────────────────────────────
 
@@ -109,7 +139,7 @@ class StateTwinBuilder:
         UniJoin().apply(
             lp, _TWIN_USER, s.reserve0, s.reserve1, s.lwr_tick, s.upr_tick,
         )
-        return lp
+        return self._tag_provenance(lp, s)
 
     # ─── Balancer 2-asset ───────────────────────────────────────────────────
 
@@ -134,7 +164,7 @@ class StateTwinBuilder:
         )
         lp = factory.deploy(exch_data)
         BJoin().apply(lp, _TWIN_USER, s.pool_shares_init)
-        return lp
+        return self._tag_provenance(lp, s)
 
     # ─── Stableswap 2-asset ─────────────────────────────────────────────────
 
@@ -156,4 +186,4 @@ class StateTwinBuilder:
         )
         lp = factory.deploy(exch_data)
         SJoin().apply(lp, _TWIN_USER, s.A)
-        return lp
+        return self._tag_provenance(lp, s)

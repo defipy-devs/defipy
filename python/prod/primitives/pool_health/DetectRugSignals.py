@@ -182,10 +182,20 @@ class DetectRugSignals:
         # Requires knowable swap history. V2 tracks it; V3 does not.
         if health.num_swaps is None:
             inactive_with_liquidity = False
-            details.append(
-                "inactive_with_liquidity: unavailable for V3 "
-                "(no per-swap history)"
-            )
+            # num_swaps is None for two distinct reasons: a V3 pool (no
+            # per-swap history array) or a live single-block snapshot (swap
+            # history isn't recoverable from state alone). Word the note for
+            # the actual case so a live V2 read isn't mislabeled as "V3".
+            if health.version == "V3":
+                details.append(
+                    "inactive_with_liquidity: unavailable for V3 "
+                    "(no per-swap history)"
+                )
+            else:
+                details.append(
+                    "inactive_with_liquidity: not evaluated "
+                    "(swap history unavailable for a live snapshot)"
+                )
         else:
             inactive_with_liquidity = (
                 health.num_swaps == 0 and health.tvl_in_token0 > 0

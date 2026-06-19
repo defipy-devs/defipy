@@ -281,7 +281,9 @@ TOOL_REGISTRY: dict[str, ToolSpec] = {
             "concentration, and swap activity. Answers 'is this a pool I "
             "would deposit into?' at the pool level (not position level). "
             "num_swaps and fee_accrual_rate_recent are V2-only; V3 returns "
-            "null for these because V3 has no per-swap history array."
+            "null for these because V3 has no per-swap history array. A "
+            "single-block live snapshot also returns null for the "
+            "LP-concentration and swap metrics (unrecoverable from state alone)."
         ),
         primitive_cls=CheckPoolHealth,
         signature_params=("recent_window",),

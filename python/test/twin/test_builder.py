@@ -76,6 +76,101 @@ def test_builder_rejects_unknown_snapshot_type():
     assert "unknown snapshot type" in str(excinfo.value).lower()
 
 
+# ─── Provenance tagging ─────────────────────────────────────────────────────
+# A built twin must carry whether it came from a live chain snapshot
+# (block_number populated) or a synthetic/mock one (block_number None).
+# Downstream primitives (CheckPoolHealth) read this to decide whether the
+# twin's single synthetic LP and empty swap history are real facts or
+# reconstruction artifacts to be reported as "unknown".
+
+_LIVE_BLOCK = 19_500_000
+
+
+def test_v2_live_snapshot_flags_twin_and_carries_block():
+    snap = V2PoolSnapshot(
+        pool_id = "0xB4e16d0168e52d35CaCD2c6185b44281Ec28C9Dc",
+        token0_name = "USDC", token1_name = "WETH",
+        reserve0 = 16670066, reserve1 = 5000,
+        block_number = _LIVE_BLOCK,
+    )
+    lp = StateTwinBuilder().build(snap)
+    assert lp.live_snapshot is True
+    assert lp.snapshot_block_number == _LIVE_BLOCK
+
+
+def test_v2_mock_snapshot_not_flagged():
+    snap = V2PoolSnapshot(
+        pool_id = "t", token0_name = "ETH", token1_name = "DAI",
+        reserve0 = 1000, reserve1 = 100000,
+    )
+    lp = StateTwinBuilder().build(snap)
+    assert lp.live_snapshot is False
+    assert lp.snapshot_block_number is None
+
+
+def test_v3_live_snapshot_flags_twin_and_carries_block():
+    snap = V3PoolSnapshot(
+        pool_id = "t", token0_name = "ETH", token1_name = "DAI",
+        reserve0 = 1000, reserve1 = 100000,
+        block_number = _LIVE_BLOCK,
+    )
+    lp = StateTwinBuilder().build(snap)
+    assert lp.live_snapshot is True
+    assert lp.snapshot_block_number == _LIVE_BLOCK
+
+
+def test_v3_mock_snapshot_not_flagged():
+    snap = V3PoolSnapshot(
+        pool_id = "t", token0_name = "ETH", token1_name = "DAI",
+        reserve0 = 1000, reserve1 = 100000,
+    )
+    lp = StateTwinBuilder().build(snap)
+    assert lp.live_snapshot is False
+    assert lp.snapshot_block_number is None
+
+
+def test_balancer_live_snapshot_flags_twin():
+    snap = BalancerPoolSnapshot(
+        pool_id = "t", token0_name = "ETH", token1_name = "DAI",
+        reserve0 = 1000, reserve1 = 100000,
+        block_number = _LIVE_BLOCK,
+    )
+    lp = StateTwinBuilder().build(snap)
+    assert lp.live_snapshot is True
+    assert lp.snapshot_block_number == _LIVE_BLOCK
+
+
+def test_balancer_mock_snapshot_not_flagged():
+    snap = BalancerPoolSnapshot(
+        pool_id = "t", token0_name = "ETH", token1_name = "DAI",
+        reserve0 = 1000, reserve1 = 100000,
+    )
+    lp = StateTwinBuilder().build(snap)
+    assert lp.live_snapshot is False
+    assert lp.snapshot_block_number is None
+
+
+def test_stableswap_live_snapshot_flags_twin():
+    snap = StableswapPoolSnapshot(
+        pool_id = "t", token_names = ["USDC", "DAI"],
+        reserves = [100000, 100000], A = 10,
+        block_number = _LIVE_BLOCK,
+    )
+    lp = StateTwinBuilder().build(snap)
+    assert lp.live_snapshot is True
+    assert lp.snapshot_block_number == _LIVE_BLOCK
+
+
+def test_stableswap_mock_snapshot_not_flagged():
+    snap = StableswapPoolSnapshot(
+        pool_id = "t", token_names = ["USDC", "DAI"],
+        reserves = [100000, 100000], A = 10,
+    )
+    lp = StateTwinBuilder().build(snap)
+    assert lp.live_snapshot is False
+    assert lp.snapshot_block_number is None
+
+
 # ─── Reserves consistency ───────────────────────────────────────────────────
 # Built lp must have the same reserves that the fixture fixture produces
 # for the same inputs. Critical guardrail against silent divergence.

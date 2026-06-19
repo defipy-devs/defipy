@@ -234,5 +234,58 @@ class TestCheckPoolHealthV3(unittest.TestCase):
         self.assertEqual(result.tick_current, self.setup.lp.slot0.tick)
 
 
+# ─── Live-snapshot provenance suite ──────────────────────────────────────────
+# A twin built from a single-block live snapshot is reconstructed as one
+# synthetic LP with an empty swap history. That state is an artifact of
+# reconstruction, not a fact about the pool — so CheckPoolHealth must
+# report LP-concentration and swap-activity metrics as None ("unknown")
+# when the twin is flagged live (lp.live_snapshot is True). The v2_setup
+# fixture (single LP, zero swaps, healthy TVL) is the exact analog of a
+# live USDC/WETH twin, so flagging it reproduces the live read path.
+
+class TestCheckPoolHealthLiveSnapshot(unittest.TestCase):
+
+    @pytest.fixture(autouse = True)
+    def _bind_setup(self, v2_setup):
+        self.setup = v2_setup
+
+    def test_live_twin_reports_unknown_lp_and_swap_metrics(self):
+        self.setup.lp.live_snapshot = True
+        result = CheckPoolHealth().apply(self.setup.lp)
+        # Reconstruction artifacts → reported as unknown, not concrete.
+        self.assertIsNone(result.num_lps)
+        self.assertIsNone(result.top_lp_share_pct)
+        self.assertIsNone(result.num_swaps)
+        self.assertIsNone(result.fee_accrual_rate_recent)
+        self.assertFalse(result.has_activity)
+
+    def test_live_twin_still_reports_reserves_and_tvl(self):
+        # Provenance gate suppresses only LP/swap metrics; real state
+        # (reserves, spot price, TVL) remains fully reported.
+        self.setup.lp.live_snapshot = True
+        result = CheckPoolHealth().apply(self.setup.lp)
+        self.assertAlmostEqual(result.reserve0, 1000.0, places = 4)
+        self.assertAlmostEqual(result.reserve1, 100000.0, places = 4)
+        self.assertAlmostEqual(result.tvl_in_token0, 2000.0, places = 4)
+
+    def test_mock_twin_unaffected_reports_concrete_metrics(self):
+        # The same fixture WITHOUT the live flag (mock / direct build)
+        # keeps concrete single-LP, zero-swap values — the gate must not
+        # touch the MockProvider path.
+        self.setup.lp.live_snapshot = False
+        result = CheckPoolHealth().apply(self.setup.lp)
+        self.assertEqual(result.num_lps, 1)
+        self.assertGreater(result.top_lp_share_pct, 0.999)
+        self.assertEqual(result.num_swaps, 0)
+
+    def test_missing_flag_defaults_to_concrete_metrics(self):
+        # A twin with no live_snapshot attribute at all (e.g. a fixture
+        # or directly-constructed lp) is treated as non-live.
+        self.assertFalse(hasattr(self.setup.lp, "live_snapshot"))
+        result = CheckPoolHealth().apply(self.setup.lp)
+        self.assertEqual(result.num_lps, 1)
+        self.assertEqual(result.num_swaps, 0)
+
+
 if __name__ == '__main__':
     unittest.main()

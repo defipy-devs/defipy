@@ -145,13 +145,34 @@ class CheckPoolHealth:
                      if lp.version == UniswapExchangeData.VERSION_V3 \
                      else lp.collected_fee1
 
-        # Swap count and rolling fee accrual — V2 only.
-        num_swaps, fee_accrual_rate_recent = self._swap_activity(
-            lp, recent_window
-        )
+        # Provenance gate. A twin built from a single-block live snapshot
+        # (LiveProvider read path) carries no swap/event replay and no
+        # recovered LP-holder distribution — StateTwinBuilder reconstructs
+        # it as one synthetic provider with an empty fee history. Reading
+        # that synthetic state literally yields "top LP holds 100%" and
+        # "zero swaps", which are artifacts of reconstruction, not facts
+        # about the pool. Recovering the truth needs log/event indexing,
+        # which a state snapshot can't provide. So for live twins we
+        # report these as None ("unknown"), not as misleading concretes.
+        # Mock twins (block_number=None → live_snapshot False/absent) keep
+        # their concrete values, since their single-LP/zero-swap state is
+        # the actual, intended fixture truth.
+        from_live_snapshot = getattr(lp, 'live_snapshot', False)
 
-        # LP concentration metrics.
-        num_lps, top_lp_share_pct = self._lp_concentration(lp)
+        # Swap count and rolling fee accrual — V2 only, and only when the
+        # twin actually carries swap history.
+        if from_live_snapshot:
+            num_swaps, fee_accrual_rate_recent = None, None
+        else:
+            num_swaps, fee_accrual_rate_recent = self._swap_activity(
+                lp, recent_window
+            )
+
+        # LP concentration metrics — only meaningful when the LP set is real.
+        if from_live_snapshot:
+            num_lps, top_lp_share_pct = None, None
+        else:
+            num_lps, top_lp_share_pct = self._lp_concentration(lp)
 
         has_activity = num_swaps is not None and num_swaps > 0
 
