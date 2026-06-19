@@ -4,6 +4,11 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
+      # 2.2.1: CheckPoolHealth reports LP-concentration and swap metrics
+      # as null for live single-block snapshots (reconstruction artifacts,
+      # not chain facts — a state read can't recover LP holders or swap
+      # history), fixing DetectRugSignals false-positive "high" verdicts on
+      # healthy live pools.
       # 2.2.0: Balancer & Stableswap LiveProvider. Arg-bearing Multicall3
       # helper (multicall_aggregate3_args), Balancer V2 weighted-pool
       # reads (2-asset), Curve plain-pool reads (N-coin, with coin-count
@@ -11,7 +16,7 @@ setup(name='DeFiPy',
       # for the Balancer/Curve read ABIs. The LiveProvider read path now
       # covers V2, V3, Balancer, and Stableswap. Phases 1-3 of
       # DEFIPY_V2_2_LIVEPROVIDER_SPEC.md all shipped.
-      version='2.2.0',
+      version='2.2.1',
       description='Python SDK for Agentic DeFi',
       long_description=long_description,
       long_description_content_type="text/markdown",
