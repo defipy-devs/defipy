@@ -4,6 +4,11 @@ with open('README.md') as f:
     long_description = f.read()
 
 setup(name='DeFiPy',
+      # 2.2.2: V2 State Twin carries the pool's real LP totalSupply (was the
+      # synthetic √(reserve0·reserve1)), correcting AnalyzePosition's absolute
+      # outputs for live V2 twins. Backward compatible: V2PoolSnapshot
+      # .total_supply is optional (None → synthetic fallback). V3 real-supply
+      # remains a known gap.
       # 2.2.1: CheckPoolHealth reports LP-concentration and swap metrics
       # as null for live single-block snapshots (reconstruction artifacts,
       # not chain facts — a state read can't recover LP holders or swap
@@ -16,7 +21,7 @@ setup(name='DeFiPy',
       # for the Balancer/Curve read ABIs. The LiveProvider read path now
       # covers V2, V3, Balancer, and Stableswap. Phases 1-3 of
       # DEFIPY_V2_2_LIVEPROVIDER_SPEC.md all shipped.
-      version='2.2.1',
+      version='2.2.2',
       description='Python SDK for Agentic DeFi',
       long_description=long_description,
       long_description_content_type="text/markdown",

@@ -337,12 +337,16 @@ class LiveProvider(StateTwinProvider):
         token0_addr = pair.functions.token0().call(block_identifier=block_number)
         token1_addr = pair.functions.token1().call(block_identifier=block_number)
         reserves = pair.functions.getReserves().call(block_identifier=block_number)
-        # totalSupply is read but not stored on the V2PoolSnapshot in
-        # Phase 1 — StateTwinBuilder reconstructs supply via the V2
-        # invariant during add_liquidity. Read it anyway so a future
-        # snapshot.total_supply field can be added without changing
-        # the read pattern.
-        _ = pair.functions.totalSupply().call(block_identifier=block_number)
+        # Real LP-token totalSupply (v2.2.2). A UniswapV2 LP token is
+        # always 18 decimals, so adjust by 1e18 directly — NOT by a pool
+        # token's decimals (amt_to_decimal would be wrong here, e.g. USDC
+        # is 6). This is the real accumulated mint-minus-burn supply,
+        # which drifts above √(r0·r1) as fees grow reserves without
+        # minting LP. Stored on the snapshot so the builder can stamp the
+        # true supply onto the twin.
+        total_supply_raw = pair.functions.totalSupply().call(
+            block_identifier=block_number)
+        total_supply = int(total_supply_raw) / 1e18
 
         # FetchToken returns a uniswappy.erc.ERC20 with .token_name
         # (symbol), .token_addr, .token_decimal. metadata reads happen
@@ -370,6 +374,7 @@ class LiveProvider(StateTwinProvider):
             token1_name = tkn1.token_name,
             reserve0 = reserve0,
             reserve1 = reserve1,
+            total_supply = total_supply,
             block_number = block_number,
             timestamp = timestamp,
             chain_id = chain_id,

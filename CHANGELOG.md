@@ -10,6 +10,34 @@ and the GitHub releases page.
 
 ---
 
+## [2.2.2] — 2026-06-22
+
+A backward-compatible patch: the Uniswap V2 State Twin now carries the pool's
+real LP-token `totalSupply` instead of the synthetic `√(reserve0·reserve1)` it
+reconstructed before.
+
+### Fixed
+
+- **V2 State Twin uses the real LP `totalSupply`.** `LiveProvider` now stores
+  the on-chain `totalSupply()` (18-decimal-adjusted) on `V2PoolSnapshot`, and
+  `StateTwinBuilder` stamps it onto the built twin. This corrects
+  `AnalyzePosition`'s absolute outputs (`current_value`, `net_pnl`,
+  `fee_income`) for live V2 twins — previously every live V2 twin used
+  `√(r0·r1)`, which drifts above the real supply as fees grow reserves without
+  minting LP. Scale-invariant outputs (`SimulatePriceMove`,
+  `CalculateSlippage`, impermanent-loss percentage) are unchanged.
+
+### Added
+
+- **`V2PoolSnapshot.total_supply`** — `Optional[float]`, defaulted `None`.
+  Backward compatible: `MockProvider` snapshots and older wire forms leave it
+  `None`, in which case the builder keeps the synthetic `√(r0·r1)` supply.
+
+### Known gaps
+
+- V3 twins still reconstruct supply from position math (no real-supply field
+  yet) — a separate, harder problem deferred to a future release.
+
 ## [2.2.0] — 2026-06-18
 
 The "Balancer & Stableswap LiveProvider" cycle. v2.2 extends the

@@ -74,11 +74,17 @@ class V2PoolSnapshot(PoolSnapshot):
     the snapshot; MockProvider produces decimal floats directly.
     `StateTwinBuilder._build_v2` passes these straight to
     `lp.add_liquidity()`, which expects decimal-adjusted amounts.
+
+    `total_supply` is the pool's real LP-token totalSupply in whole-token
+    (18-decimal-adjusted) units, populated by LiveProvider. None for
+    MockProvider and for older wire forms — in which case StateTwinBuilder
+    falls back to the synthetic √(reserve0·reserve1) single-mint supply.
     """
     token0_name: str
     token1_name: str
     reserve0: float
     reserve1: float
+    total_supply: Optional[float] = None   # real LP supply; None → synthetic fallback
 
     def __post_init__(self):
         self.protocol = "uniswap_v2"

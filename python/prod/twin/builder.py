@@ -117,7 +117,35 @@ class StateTwinBuilder:
         )
         lp = factory.deploy(exch_data)
         lp.add_liquidity(_TWIN_USER, s.reserve0, s.reserve1, s.reserve0, s.reserve1)
+
+        # v2.2.2 — stamp the REAL LP totalSupply when the snapshot carries
+        # it (LiveProvider does; MockProvider / old wire forms leave it
+        # None and keep the synthetic √(r0·r1) supply set by add_liquidity).
+        # add_liquidity sets total_supply = √(reserve0·reserve1), which
+        # drifts from the real on-chain supply as fees grow reserves —
+        # mis-scaling AnalyzePosition's absolute outputs (they read
+        # lp_init_amt as a scalar against total_supply).
+        if s.total_supply is not None:
+            self._set_v2_total_supply(lp, s.total_supply)
+
         return self._tag_provenance(lp, s)
+
+    @staticmethod
+    def _set_v2_total_supply(lp, real_supply: float) -> None:
+        """Overwrite a built V2 twin's LP supply with the real on-chain
+        totalSupply, keeping the single synthetic provider (_TWIN_USER) in
+        lockstep so get_liquidity() and the holder's balance both report
+        the real value.
+
+        The uniswappy V2 exchange stores `total_supply` and the
+        `liquidity_providers` ledger in MACHINE units (get_liquidity() /
+        get_liquidity_from_provider() apply convert_to_human), while the
+        snapshot carries `real_supply` in human (18-dec-adjusted) units —
+        so route through the exchange's own `convert_to_machine` to match
+        whatever precision mode the twin uses (NOT a raw assignment)."""
+        machine_supply = lp.convert_to_machine(real_supply)
+        lp.total_supply = machine_supply
+        lp.liquidity_providers[_TWIN_USER] = machine_supply
 
     # ─── Uniswap V3 ─────────────────────────────────────────────────────────
 
